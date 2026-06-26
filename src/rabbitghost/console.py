@@ -61,6 +61,7 @@ def menu() -> None:
           encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
+          spool             store-and-forward outbox: pending count + online status
           status            posture
           quit              stand down (drops all ghost components for GC)
         """
@@ -151,6 +152,10 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         else:
             pw = getpw("passphrase: ").strip() or None
             out({"hidden": GhostCloak(passphrase=pw).extract_payload(rest)})
+    elif cmd == "spool":
+        from rabbitghost import transport
+        sp = transport.Spool()
+        out({"pending": len(sp), "online": transport.online()})
     elif cmd == "parse":
         from rabbitghost import parser
         res = parser.parse(rest, max_chars=2000)
