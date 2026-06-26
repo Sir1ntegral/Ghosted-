@@ -12,6 +12,8 @@ dist/
 *.spec
 work/
 *.log
+installer_out/
+.build-tmp/
 
 # Local / runtime
 .pytmp/
