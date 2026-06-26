@@ -47,9 +47,11 @@ def send_external(
     msg["Subject"] = subject
     msg.set_content(body)
 
+    if (username or password) and not use_tls:
+        raise ValueError("refusing to send SMTP credentials without TLS (set use_tls=True)")
     with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
         if use_tls:
-            server.starttls(context=ssl.create_default_context())
+            server.starttls(context=ssl.create_default_context())  # verified TLS
         if username and password:
             server.login(username, password)
         server.send_message(msg)

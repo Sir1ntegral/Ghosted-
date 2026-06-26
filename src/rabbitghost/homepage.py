@@ -386,6 +386,9 @@ _SESSIONS: dict = {}                 # token -> expiry epoch
 _SESSIONS_LOCK = threading.Lock()
 _SESSION_TTL = 12 * 3600             # sessions expire after 12h
 _SESSIONS_MAX = 1024                 # bound the map (anti-growth)
+_LOGIN_FAILS: dict = {}              # ip -> (fail_count, window_start) — brute-force guard
+_LOGIN_MAX = 5                       # failures per window before lockout
+_LOGIN_WINDOW = 300                  # 5 min
 
 
 def _local_ip(ip: str) -> bool:
@@ -479,6 +482,15 @@ class _Handler(BaseHTTPRequestHandler):
             self._send("<h1>403 — Gojo boundary denied</h1>", 403)
             return
         if parsed.path == "/login":
+            client = self.client_address[0] if self.client_address else ""
+            now = time.time()
+            with _SESSIONS_LOCK:  # brute-force lockout per source IP
+                cnt, start = _LOGIN_FAILS.get(client, (0, now))
+                if now - start > _LOGIN_WINDOW:
+                    cnt, start = 0, now
+                if cnt >= _LOGIN_MAX:
+                    self._send("<h1>429 — too many attempts, slow down</h1>", 429)
+                    return
             try:
                 length = int(self.headers.get("Content-Length", "0") or 0)
             except ValueError:
@@ -495,6 +507,14 @@ class _Handler(BaseHTTPRequestHandler):
                 ok = vault.login(pw)
             except Exception:
                 ok = False
+            with _SESSIONS_LOCK:  # record the attempt
+                if ok:
+                    _LOGIN_FAILS.pop(client, None)
+                else:
+                    c, s = _LOGIN_FAILS.get(client, (0, now))
+                    if now - s > _LOGIN_WINDOW:
+                        c, s = 0, now
+                    _LOGIN_FAILS[client] = (c + 1, s)
             if ok:
                 tok = secrets.token_urlsafe(32)
                 now = time.time()

@@ -25,8 +25,7 @@ def _load() -> list:
 
 
 def _save(cs: list) -> None:
-    with open(_path(), "w", encoding="utf-8") as fh:
-        json.dump(cs, fh)
+    mail.atomic_write_json(_path(), cs)  # crash-safe (temp + fsync + os.replace)
 
 
 def add_contact(name: str, address: str, *, tags=None, note: str = "") -> dict:

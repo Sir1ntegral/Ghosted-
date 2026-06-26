@@ -32,8 +32,7 @@ def _load() -> list:
 
 
 def _save(fs: list) -> None:
-    with open(_path(), "w", encoding="utf-8") as fh:
-        json.dump(fs, fh)
+    mail.atomic_write_json(_path(), fs)  # crash-safe — block-rules never silently vanish
 
 
 def add_filter(field: str, op: str, value: str, action: str, *, arg: str = "", name: str = "") -> dict:
@@ -66,7 +65,9 @@ def filters() -> list:
 
 
 def _match(rule: dict, msg: dict) -> bool:
-    hay = str(msg.get(rule["field"], "") or "")
+    # Bound the regex input — a user's filter regex on attacker-controlled mail body
+    # could otherwise backtrack catastrophically (ReDoS). Capped input = bounded time.
+    hay = str(msg.get(rule["field"], "") or "")[:100_000]
     val = rule["value"]
     op = rule["op"]
     if op == "contains":

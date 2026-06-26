@@ -66,7 +66,7 @@ def test_imap_pull_blackboxes(tmp_path, monkeypatch):
         def logout(self):
             pass
 
-    monkeypatch.setattr("imaplib.IMAP4_SSL", lambda host, port: FakeIMAP(host, port))
+    monkeypatch.setattr("imaplib.IMAP4_SSL", lambda host, port, **kw: FakeIMAP(host, port))
     res = imap_pull.pull_imap("imap.gmail.com", "lucy@gmail.com", "app-pass", "mykey")
     assert res["sealed"] == 2
 

@@ -64,9 +64,30 @@ def _load_ids() -> list:
         return []
 
 
+def atomic_write_json(path: str, obj) -> None:
+    """Crash-safe JSON write: temp file + fsync + atomic os.replace. Shared by the
+    local stores (identities/contacts/filters) so a crash mid-write can't truncate
+    and silently empty a security-relevant store (e.g. block-rules)."""
+    import tempfile
+
+    d = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        raise
+
+
 def _save_ids(ids: list) -> None:
-    with open(_identities_path(), "w", encoding="utf-8") as fh:
-        json.dump(ids, fh)
+    atomic_write_json(_identities_path(), ids)
 
 
 def add_identity(addr: str) -> str:

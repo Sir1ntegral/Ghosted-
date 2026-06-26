@@ -20,6 +20,7 @@ import os
 from html.parser import HTMLParser
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif", ".webp"}
+_MAX_BYTES = 16 * 1024 * 1024  # cap untrusted input — memory-exhaustion guard
 
 
 class _TextHTML(HTMLParser):
@@ -45,7 +46,7 @@ def _html_to_text(s: str) -> str:
 
 def parse_text(text: str) -> dict:
     """Sniff and parse a raw string: json → csv → html → plain."""
-    t = (text or "").strip()
+    t = (text or "")[:_MAX_BYTES].strip()
     if not t:
         return {"type": "text", "text": ""}
     # JSON
@@ -100,7 +101,7 @@ def parse_file(path: str, *, max_chars: int | None = None) -> dict:
     # Stdlib fallback (lightweight formats)
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
-            raw = fh.read()
+            raw = fh.read(_MAX_BYTES)  # capped read — DoS guard
     except Exception as e:  # noqa: BLE001
         return {"type": "error", "text": "", "error": str(e), "path": path}
     result = parse_text(raw)

@@ -38,6 +38,8 @@ def _store(token: str) -> str:
 
 
 class _Inbox(BaseHTTPRequestHandler):
+    timeout = 30  # slowloris guard — socketserver applies this to the request socket
+
     def do_POST(self) -> None:  # noqa: N802
         ip = self.client_address[0] if self.client_address else ""
         if not _accept_ip(ip):
@@ -58,7 +60,13 @@ class _Inbox(BaseHTTPRequestHandler):
             self.send_response(413)
             self.end_headers()
             return
-        token = self.rfile.read(length).decode("ascii", "replace") if length else ""
+        raw = self.rfile.read(length) if length else b""
+        try:
+            token = raw.decode("ascii")  # valid black-box tokens are base64 ASCII
+        except UnicodeDecodeError:
+            self.send_response(400)       # non-ASCII junk → reject (was a write crash)
+            self.end_headers()
+            return
         _store(token)  # store the opaque black box; only the key-holder can open it
         self.send_response(200)
         self.send_header("Content-Length", "2")
@@ -125,7 +133,9 @@ def flush_outbound() -> dict:
         except Exception:
             return False
 
-    return sp.flush(_send)
+    # check_online=False: mesh peers may be reachable on a LAN with NO public internet
+    # (the whole point of the mesh) — gate per-peer in _send, not on public probes.
+    return sp.flush(_send, check_online=False)
 
 
 if __name__ == "__main__":

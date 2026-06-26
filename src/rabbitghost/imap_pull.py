@@ -13,15 +13,28 @@ from __future__ import annotations
 
 import imaplib
 import poplib
+import ssl
 
 from rabbitghost import mail
 
+_TIMEOUT = 30  # never hang the calling thread on a dead/slow provider
+
 
 def pull_imap(host: str, username: str, password: str, key: str, *,
-              port: int = 993, folder: str = "INBOX", limit: int = 50, use_ssl: bool = True) -> dict:
+              port: int = 993, folder: str = "INBOX", limit: int = 50, use_ssl: bool = True,
+              ssl_context: "ssl.SSLContext | None" = None) -> dict:
     """Fetch up to `limit` newest messages from an IMAP inbox; black-box each at rest.
-    Returns the count sealed. Credentials are used for this call only."""
-    M = imaplib.IMAP4_SSL(host, port) if use_ssl else imaplib.IMAP4(host, port)
+    Returns the count sealed. Credentials are used for this call only.
+
+    Hardened: TLS is verified (cert + hostname) by default; credentials are NEVER sent
+    over a non-TLS connection (raises instead of leaking them in cleartext)."""
+    if not use_ssl and password:
+        raise ValueError("refusing to send IMAP credentials over a non-TLS connection")
+    if use_ssl:
+        ctx = ssl_context or ssl.create_default_context()  # verifies cert + hostname
+        M = imaplib.IMAP4_SSL(host, port, ssl_context=ctx, timeout=_TIMEOUT)
+    else:
+        M = imaplib.IMAP4(host, port, timeout=_TIMEOUT)
     sealed = 0
     try:
         M.login(username, password)
@@ -44,9 +57,17 @@ def pull_imap(host: str, username: str, password: str, key: str, *,
 
 
 def pull_pop(host: str, username: str, password: str, key: str, *,
-             port: int = 995, limit: int = 50, use_ssl: bool = True) -> dict:
-    """Fetch up to `limit` newest messages from a POP3 inbox; black-box each at rest."""
-    P = poplib.POP3_SSL(host, port) if use_ssl else poplib.POP3(host, port)
+             port: int = 995, limit: int = 50, use_ssl: bool = True,
+             ssl_context: "ssl.SSLContext | None" = None) -> dict:
+    """Fetch up to `limit` newest messages from a POP3 inbox; black-box each at rest.
+    Hardened: TLS verified by default; credentials never sent over a non-TLS link."""
+    if not use_ssl and password:
+        raise ValueError("refusing to send POP credentials over a non-TLS connection")
+    if use_ssl:
+        ctx = ssl_context or ssl.create_default_context()
+        P = poplib.POP3_SSL(host, port, context=ctx, timeout=_TIMEOUT)
+    else:
+        P = poplib.POP3(host, port, timeout=_TIMEOUT)
     sealed = 0
     try:
         P.user(username)
