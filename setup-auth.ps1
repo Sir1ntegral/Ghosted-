@@ -42,9 +42,35 @@ else {
             $tok | & $gh auth login --hostname github.com --git-protocol https --with-token
         }
         '3' {
-            Write-Host "[*] Opening GitHub sign-up in your browser..." -ForegroundColor Yellow
-            Start-Process "https://github.com/signup"
-            Write-Host "    Create your account (email + verify), then re-run this wizard." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "--- New account: basic info + settings ---" -ForegroundColor Cyan
+            Write-Host "(GitHub requires you to finish sign-up in the browser: password," -ForegroundColor DarkGray
+            Write-Host " email verification, and CAPTCHA can't be automated. I'll prep everything else.)" -ForegroundColor DarkGray
+            Write-Host ""
+            $fullname = Read-Host "  Your name (for git commit identity)"
+            $email    = Read-Host "  Your email (for GitHub + git commits)"
+            $username = Read-Host "  Desired GitHub username"
+            Write-Host ""
+            Write-Host "--- Settings ---" -ForegroundColor Cyan
+            $vis = Read-Host "  Repo visibility for RabbitGhost [private/public] (default private)"
+            if ($vis -ne 'public') { $vis = 'private' }
+            Set-Content -Path (Join-Path $repo '.rabbitghost-setup') -Value "visibility=$vis`nusername=$username`nemail=$email" -Encoding ascii
+
+            # Apply local git identity now (so the eventual push commits are attributed correctly)
+            if ($fullname) { git config user.name  "$fullname" }
+            if ($email)    { git config user.email "$email" }
+
+            Write-Host ""
+            Write-Host "[*] Opening GitHub sign-up (email pre-filled)..." -ForegroundColor Yellow
+            if ($email) { Start-Process ("https://github.com/signup?user_email=" + [uri]::EscapeDataString($email)) }
+            else        { Start-Process "https://github.com/signup" }
+            Write-Host ""
+            Write-Host "  Suggested username : $username" -ForegroundColor Green
+            Write-Host "  Repo visibility    : $vis (saved)" -ForegroundColor Green
+            Write-Host "  Git identity       : configured locally" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  1) Finish sign-up in the browser (set a password, verify email, CAPTCHA)."
+            Write-Host "  2) Re-run this wizard and pick [1] browser login -> it will push automatically."
             exit 0
         }
         default { Write-Host "Invalid choice." -ForegroundColor Red; exit 1 }
@@ -70,7 +96,13 @@ if ($LASTEXITCODE -eq 0) {
     git push -u origin main
 }
 else {
-    & $gh repo create RabbitGhost --private --source=. --remote=origin --push
+    $vis = "private"
+    $cfgPath = Join-Path $repo '.rabbitghost-setup'
+    if (Test-Path $cfgPath) {
+        $m = Select-String -Path $cfgPath -Pattern '^visibility=(\w+)' | Select-Object -First 1
+        if ($m) { $vis = $m.Matches[0].Groups[1].Value }
+    }
+    & $gh repo create RabbitGhost "--$vis" --source=. --remote=origin --push
 }
 
 Write-Host ""

@@ -21,6 +21,12 @@ logs/
 .env
 .env.*
 
+# Local setup + private user data (history/favorites/credentials never leave the device)
+.rabbitghost-setup
+*.history.json
+*.favorites.json
+*.vault
+
 # OS
 Thumbs.db
 .DS_Store
