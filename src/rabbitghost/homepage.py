@@ -177,29 +177,36 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
 _PORT = 7654
 
 _CSS = """
-*{box-sizing:border-box;font-family:Segoe UI,Arial,sans-serif}
-body{margin:0;background:#0d1020;color:#e8e8f0;display:flex;flex-direction:column;
- align-items:center;min-height:100vh}
-.logo{font-size:64px;margin-top:18vh;letter-spacing:1px}
-.logo b{color:#9aa9ff}
-.tag{color:#8890b0;margin:6px 0 26px}
-form{width:min(560px,92vw)}
-input[type=text]{width:100%;padding:15px 20px;border-radius:26px;border:1px solid #2a2f50;
- background:#161a30;color:#fff;font-size:17px;outline:none}
-input[type=text]:focus{border-color:#9aa9ff;box-shadow:0 0 0 3px #9aa9ff22}
-.btns{margin-top:18px;text-align:center}
-button{background:#1b2140;color:#cfd6ff;border:1px solid #2a2f50;padding:10px 18px;
- border-radius:8px;font-size:14px;cursor:pointer;margin:0 6px}
-button:hover{border-color:#9aa9ff}
-.ips{position:fixed;bottom:0;left:0;right:0;background:#0a0c18;border-top:1px solid #1c2138;
- font-size:12px;color:#7e88ad;padding:8px 14px;display:flex;gap:18px;flex-wrap:wrap}
-.ips b{color:#9aa9ff}
-.res{width:min(680px,92vw);margin:26px 0 80px}
-.r{padding:12px 0;border-bottom:1px solid #1c2138}
-.r a{color:#9aa9ff;text-decoration:none;font-size:18px}
-.r .u{color:#5f7a55;font-size:12px;word-break:break-all}
-.r .s{color:#c2c8e0;font-size:14px;margin-top:3px}
-.r .b{color:#6f7aa0;font-size:11px;margin-top:4px;letter-spacing:.3px}
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;
+ color:#e9ecf6;font-family:system-ui,'Segoe UI',Inter,Roboto,Arial,sans-serif;
+ background:radial-gradient(1200px 620px at 50% -12%,#1a2046 0%,#0d1020 56%,#090b16 100%)}
+.logo{font-size:60px;font-weight:300;margin-top:17vh;letter-spacing:.5px}
+.logo b{font-weight:600;background:linear-gradient(90deg,#9aa9ff,#c8b6ff);
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+.tag{color:#7e88b5;font-size:14px;margin:10px 0 30px;letter-spacing:.2px}
+form{width:min(580px,92vw)}
+input[type=text]{width:100%;padding:16px 22px;border-radius:30px;border:1px solid #2a2f55;
+ background:rgba(22,26,48,.85);color:#fff;font-size:16.5px;outline:none;
+ box-shadow:0 10px 34px rgba(0,0,0,.38);transition:border-color .16s,box-shadow .16s}
+input[type=text]::placeholder{color:#6b73a0}
+input[type=text]:focus{border-color:#9aa9ff;
+ box-shadow:0 10px 34px rgba(0,0,0,.38),0 0 0 4px rgba(154,169,255,.16)}
+.btns{margin-top:20px;text-align:center}
+button{background:rgba(27,33,64,.8);color:#cfd6ff;border:1px solid #2a2f55;padding:10px 20px;
+ border-radius:10px;font-size:13.5px;cursor:pointer;margin:0 6px;transition:all .16s}
+button:hover{border-color:#9aa9ff;background:rgba(40,48,90,.85);transform:translateY(-1px)}
+.ips{position:fixed;bottom:0;left:0;right:0;background:rgba(10,12,24,.9);backdrop-filter:blur(8px);
+ border-top:1px solid #1c2138;font-size:11.5px;color:#7e88ad;padding:9px 16px;display:flex;gap:18px;flex-wrap:wrap}
+.ips b{color:#9aa9ff;font-weight:600}
+.res{width:min(700px,92vw);margin:30px 0 90px}
+.r{padding:15px 16px;border-radius:12px;margin-bottom:8px;border:1px solid transparent;transition:background .16s,border-color .16s}
+.r:hover{background:rgba(255,255,255,.03);border-color:#1c2138}
+.r a{color:#9aa9ff;text-decoration:none;font-size:18px;font-weight:500}
+.r a:hover{text-decoration:underline}
+.r .u{color:#5f8a6a;font-size:12px;word-break:break-all;margin-top:2px}
+.r .s{color:#bcc3dd;font-size:14px;margin-top:5px;line-height:1.45}
+.r .b{color:#6f7aa0;font-size:11px;margin-top:6px;letter-spacing:.3px}
 .tabbar{position:fixed;top:0;left:0;right:0;display:flex;gap:2px;background:#0a0c18;border-bottom:1px solid #1c2138;padding:6px 8px 0;overflow-x:auto;z-index:10}
 .tab{display:flex;align-items:center;gap:6px;background:#161a30;color:#aeb6dc;border:1px solid #1c2138;border-bottom:none;border-radius:8px 8px 0 0;padding:7px 12px;font-size:13px;white-space:nowrap;cursor:pointer}
 .tab.active{background:#1b2140;color:#fff;border-color:#2a2f50}
