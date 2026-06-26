@@ -61,6 +61,8 @@ def menu() -> None:
           encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
+          connect           check internet across wifi/LAN/WAN (multi-interface)
+          hotspot           start a WiFi hotspot for the mesh (Windows, needs admin)
           contacts          list saved contacts
           filters           list mail filter rules
           mailsearch <q>    search your black-box mail (needs passphrase)
@@ -170,6 +172,12 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         else:
             out({"suggested": mail.address("me"), "identities": mail.identities(),
                  "note": "no IMAP / no POP — identities only; @sovereign.dmn suggested first"})
+    elif cmd == "connect":
+        from rabbitghost import connectivity
+        out(connectivity.ensure_online())
+    elif cmd == "hotspot":
+        from rabbitghost import connectivity
+        out(connectivity.start_hotspot())
     elif cmd == "contacts":
         from rabbitghost import contacts
         out({"contacts": contacts.contacts()})
