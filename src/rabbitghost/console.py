@@ -55,7 +55,8 @@ def menu() -> None:
           uncloak <img>     extract hidden message from an image
           forge <path>      produce a unique, equivalent artifact
           browse <query>    sovereign web search (Google/Bing/YT/Tor)
-          network           build a sovereign WireGuard pack-mesh (interactive)
+          login             unlock / set the master password (vault + mesh)
+          network           build a WireGuard mesh, sealed in the vault (login first)
           encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           status            posture
@@ -63,6 +64,7 @@ def menu() -> None:
         """
     ).strip()
     print(actions)
+    session = {"pw": None}  # app-login state: holds the unlocked master password
     while True:
         try:
             raw = input("ghost> ").strip()
@@ -86,19 +88,39 @@ def menu() -> None:
             elif cmd == "browse":
                 b = _browser()
                 print(b.web_search(rest))
+            elif cmd == "login":
+                import getpass
+                from rabbitghost import vault
+                pw = getpass.getpass("master password: ")
+                if not vault.is_initialized():
+                    confirm = getpass.getpass("set new master password (confirm): ")
+                    if pw != confirm:
+                        print({"vault": "passwords do not match"})
+                        continue
+                    vault.initialize(pw)
+                    session["pw"] = pw
+                    print({"vault": "initialized + unlocked"})
+                elif vault.login(pw):
+                    session["pw"] = pw
+                    print({"vault": "unlocked"})
+                else:
+                    print({"vault": "wrong password"})
             elif cmd == "network":
-                from rabbit.network.sovereign_wireguard import PackMesh
+                from rabbitghost import vault
+                if not session.get("pw"):
+                    print("locked — run 'login' first")
+                    continue
                 hub = input("hub device name (blank = full mesh): ").strip()
-                mesh = PackMesh(hub=hub or "")
+                devices = []
                 print("add devices (blank name to finish).")
                 while True:
                     nm = input("  device name: ").strip()
                     if not nm:
                         break
                     ep = input(f"  {nm} public endpoint host:port (blank if NAT): ").strip()
-                    mesh.add_device(nm, endpoint=ep)
-                paths = mesh.write()
-                print({"mesh_built": {k: str(v) for k, v in paths.items()}})
+                    devices.append((nm, ep))
+                names = vault.build_and_seal_mesh(devices, session["pw"], hub=hub or "")
+                print({"mesh_sealed_in_vault": names})
             elif cmd == "encrypt":
                 import base64
                 from rabbit.core.crypto import encrypt
