@@ -158,3 +158,23 @@ def read(path: str, passphrase: str) -> dict[str, Any]:
     """Open one black box with the key."""
     with open(path, "r", encoding="ascii") as fh:
         return _open(fh.read(), passphrase)
+
+
+def search(query: str, passphrase: str, *, limit: int = 500) -> list[dict]:
+    """Search the mailbox for query across from/to/subject/body.
+
+    Requires the key: black boxes are opaque on disk, so search must open each with
+    the passphrase, then match. Boxes the key can't open are skipped. Each hit is the
+    decrypted message dict plus its _path. Newest first.
+    """
+    q = (query or "").lower()
+    hits: list[dict] = []
+    for path in reversed(inbox()[-limit:]):
+        try:
+            m = read(path, passphrase)
+        except Exception:
+            continue  # wrong key / corrupt — can't search what we can't open
+        hay = " ".join(str(m.get(k, "")) for k in ("from", "to", "subject", "body")).lower()
+        if not q or q in hay:
+            hits.append({**m, "_path": path})
+    return hits

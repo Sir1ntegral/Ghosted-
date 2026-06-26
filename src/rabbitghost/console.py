@@ -61,6 +61,9 @@ def menu() -> None:
           encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
+          contacts          list saved contacts
+          filters           list mail filter rules
+          mailsearch <q>    search your black-box mail (needs passphrase)
           spool             store-and-forward outbox: pending count + online status
           identity [add|rm <email>]  use your own email (any kind, no IMAP/POP); @sovereign.dmn first
           status            posture
@@ -167,6 +170,16 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         else:
             out({"suggested": mail.address("me"), "identities": mail.identities(),
                  "note": "no IMAP / no POP — identities only; @sovereign.dmn suggested first"})
+    elif cmd == "contacts":
+        from rabbitghost import contacts
+        out({"contacts": contacts.contacts()})
+    elif cmd == "filters":
+        from rabbitghost import mail_filters
+        out({"filters": mail_filters.filters()})
+    elif cmd == "mailsearch":
+        from rabbitghost import mail
+        hits = mail.search(rest, getpw("passphrase: "))
+        out({"hits": len(hits), "subjects": [h.get("subject") for h in hits[:10]]})
     elif cmd == "parse":
         from rabbitghost import parser
         res = parser.parse(rest, max_chars=2000)
