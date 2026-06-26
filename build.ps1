@@ -12,6 +12,7 @@ $env:TMP = $tmp; $env:TEMP = $tmp
 python -m PyInstaller --noconfirm --clean --onedir --name RabbitGhost `
   --icon "$repo\assets\ghost_rabbit.ico" `
   --paths "$repo\src" --paths "$RabbitHome" `
+  --collect-submodules rabbitghost --collect-data rabbitghost `
   --collect-submodules rabbit.security.ghost `
   --hidden-import rabbit.research.sovereign_browser_engine `
   --hidden-import rabbit.network.sovereign_wireguard `
@@ -19,6 +20,7 @@ python -m PyInstaller --noconfirm --clean --onedir --name RabbitGhost `
   --hidden-import rabbit.core.sovereign_downloader `
   --hidden-import rabbit.council.dominance `
   --hidden-import rabbit.core.sovereign_semantic `
+  --hidden-import rabbit.perception.sovereign_ocr `
   --collect-all curl_cffi `
   --exclude-module numpy --exclude-module pandas --exclude-module scipy --exclude-module matplotlib `
   --exclude-module xarray --exclude-module h5py --exclude-module pyarrow --exclude-module dask `
