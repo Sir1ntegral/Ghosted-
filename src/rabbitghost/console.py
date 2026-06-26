@@ -60,6 +60,7 @@ def menu() -> None:
           network           build a WireGuard mesh, sealed in the vault (login first)
           encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
+          parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
           status            posture
           quit              stand down (drops all ghost components for GC)
         """
@@ -150,6 +151,14 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         else:
             pw = getpw("passphrase: ").strip() or None
             out({"hidden": GhostCloak(passphrase=pw).extract_payload(rest)})
+    elif cmd == "parse":
+        from rabbitghost import parser
+        res = parser.parse(rest, max_chars=2000)
+        info = {"type": res.get("type"), "chars": len(res.get("text") or ""),
+                "preview": (res.get("text") or "")[:160]}
+        if "error" in res:
+            info["error"] = res["error"]
+        out(info)
     else:
         out(f"unknown: {cmd}")
     return True

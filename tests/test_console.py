@@ -76,6 +76,13 @@ def test_login_password_mismatch(tmp_path, monkeypatch):
     assert "do not match" in out[0]["vault"]
 
 
+def test_parse_command(tmp_path):
+    f = tmp_path / "doc.txt"
+    f.write_text("parsed content here", encoding="utf-8")
+    _, out, _ = run("parse", str(f))
+    assert "parsed content here" in out[0]["preview"]
+
+
 def test_network_requires_login():
     _, out, _ = run("network", session={"pw": None})
     assert "locked" in out[0]
