@@ -74,84 +74,85 @@ def menu() -> None:
         if not raw:
             continue
         cmd, _, rest = raw.partition(" ")
-        cmd = cmd.lower()
         try:
-            if cmd == "quit":
-                print(g.exit())
+            if not handle_command(cmd.lower(), rest, g, session):
                 break
-            elif cmd == "status":
-                print({"active": g.is_active})
-            elif cmd == "recon":
-                print(g.recon(rest))
-            elif cmd == "forge":
-                out = rest + ".forged"
-                print(g.forge(rest, out))
-            elif cmd == "browse":
-                b = _browser()
-                print(b.web_search(rest))
-            elif cmd == "login":
-                import getpass
-                from rabbitghost import vault
-                pw = getpass.getpass("master password: ")
-                if not vault.is_initialized():
-                    confirm = getpass.getpass("set new master password (confirm): ")
-                    if pw != confirm:
-                        print({"vault": "passwords do not match"})
-                        continue
-                    vault.initialize(pw)
-                    session["pw"] = pw
-                    print({"vault": "initialized + unlocked"})
-                elif vault.login(pw):
-                    session["pw"] = pw
-                    print({"vault": "unlocked"})
-                else:
-                    print({"vault": "wrong password"})
-            elif cmd == "network":
-                from rabbitghost import vault
-                if not session.get("pw"):
-                    print("locked — run 'login' first")
-                    continue
-                hub = input("hub device name (blank = full mesh): ").strip()
-                devices = []
-                print("add devices (blank name to finish).")
-                while True:
-                    nm = input("  device name: ").strip()
-                    if not nm:
-                        break
-                    ep = input(f"  {nm} public endpoint host:port (blank if NAT): ").strip()
-                    devices.append((nm, ep))
-                names = vault.build_and_seal_mesh(devices, session["pw"], hub=hub or "")
-                print({"mesh_sealed_in_vault": names})
-            elif cmd == "encrypt":
-                import base64
-                from rabbit.core.crypto import encrypt
-                pw = getpass.getpass("passphrase: ").strip()
-                blob = encrypt(rest, pw)
-                tok = base64.b64encode(blob.to_bytes()).decode()
-                print({"sealed": tok})
-            elif cmd == "decrypt":
-                import base64
-                from rabbit.core.crypto import decrypt, EncryptedBlob
-                tok = input("sealed token: ").strip()
-                pw = getpass.getpass("passphrase: ").strip()
-                blob = EncryptedBlob.from_bytes(base64.b64decode(tok))
-                print({"opened": decrypt(blob, pw)})
-            elif cmd in ("cloak", "uncloak"):
-                from rabbit.security.ghost.ghost_cloak import GhostCloak
-                if cmd == "cloak":
-                    img, _, msg = rest.partition(" ")
-                    pw = getpass.getpass("passphrase: ").strip() or None
-                    out = img + ".cloaked.png"
-                    GhostCloak(passphrase=pw).cloak_payload(img, msg.encode(), out)
-                    print({"cloaked": out})
-                else:
-                    pw = getpass.getpass("passphrase: ").strip() or None
-                    raw_out = GhostCloak(passphrase=pw).extract_payload(rest)
-                    print({"hidden": raw_out})
-            else:
-                print(f"unknown: {cmd}")
         except Exception as e:  # console must never die on one bad op
             print(f"[error] {type(e).__name__}: {e}")
+
+
+def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, out=print) -> bool:
+    """Execute one console command. Returns False to quit, True to continue.
+
+    I/O is injectable (ask / getpw / out) so every command is unit-testable
+    without a real terminal — this is the seam that makes the console SoC-clean."""
+    if cmd == "quit":
+        out(g.exit())
+        return False
+    elif cmd == "status":
+        out({"active": g.is_active})
+    elif cmd == "recon":
+        out(g.recon(rest))
+    elif cmd == "forge":
+        out(g.forge(rest, rest + ".forged"))
+    elif cmd == "browse":
+        out(_browser().web_search(rest))
+    elif cmd == "login":
+        from rabbitghost import vault
+        pw = getpw("master password: ")
+        if not vault.is_initialized():
+            confirm = getpw("set new master password (confirm): ")
+            if pw != confirm:
+                out({"vault": "passwords do not match"})
+                return True
+            vault.initialize(pw)
+            session["pw"] = pw
+            out({"vault": "initialized + unlocked"})
+        elif vault.login(pw):
+            session["pw"] = pw
+            out({"vault": "unlocked"})
+        else:
+            out({"vault": "wrong password"})
+    elif cmd == "network":
+        from rabbitghost import vault
+        if not session.get("pw"):
+            out("locked — run 'login' first")
+            return True
+        hub = ask("hub device name (blank = full mesh): ").strip()
+        devices = []
+        out("add devices (blank name to finish).")
+        while True:
+            nm = ask("  device name: ").strip()
+            if not nm:
+                break
+            ep = ask(f"  {nm} public endpoint host:port (blank if NAT): ").strip()
+            devices.append((nm, ep))
+        out({"mesh_sealed_in_vault": vault.build_and_seal_mesh(devices, session["pw"], hub=hub or "")})
+    elif cmd == "encrypt":
+        import base64
+        from rabbit.core.crypto import encrypt
+        blob = encrypt(rest, getpw("passphrase: ").strip())
+        out({"sealed": base64.b64encode(blob.to_bytes()).decode()})
+    elif cmd == "decrypt":
+        import base64
+        from rabbit.core.crypto import EncryptedBlob, decrypt
+        tok = ask("sealed token: ").strip()
+        pw = getpw("passphrase: ").strip()
+        out({"opened": decrypt(EncryptedBlob.from_bytes(base64.b64decode(tok)), pw)})
+    elif cmd in ("cloak", "uncloak"):
+        from rabbit.security.ghost.ghost_cloak import GhostCloak
+        if cmd == "cloak":
+            img, _, msg = rest.partition(" ")
+            pw = getpw("passphrase: ").strip() or None
+            out_path = img + ".cloaked.png"
+            GhostCloak(passphrase=pw).cloak_payload(img, msg.encode(), out_path)
+            out({"cloaked": out_path})
+        else:
+            pw = getpw("passphrase: ").strip() or None
+            out({"hidden": GhostCloak(passphrase=pw).extract_payload(rest)})
+    else:
+        out(f"unknown: {cmd}")
+    return True
 
 
 if __name__ == "__main__":
