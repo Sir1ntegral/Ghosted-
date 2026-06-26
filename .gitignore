@@ -29,6 +29,14 @@ logs/
 *.favorites.json
 *.vault
 
+# Rabbit runtime artifacts (written relative to cwd by the mind during tests/runs)
+quarantine/
+state/
+data/
+runtime/
+evidence/
+genesis/
+
 # OS
 Thumbs.db
 .DS_Store
