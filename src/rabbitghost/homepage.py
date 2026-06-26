@@ -191,6 +191,18 @@ button:hover{border-color:#9aa9ff}
 .tab .x:hover{color:#ff8aa0}
 .newtab{background:#161a30;color:#9aa9ff;border:1px solid #1c2138;border-bottom:none;border-radius:8px 8px 0 0;padding:7px 12px;cursor:pointer;font-size:15px}
 body{padding-top:44px}
+.toolbar{position:fixed;top:7px;right:10px;z-index:13;display:flex;gap:6px}
+.toolbar button{font-size:12px;padding:5px 10px;margin:0}
+.panel{position:fixed;top:46px;right:10px;width:310px;max-height:74vh;overflow:auto;background:#11152a;border:1px solid #2a2f50;border-radius:10px;padding:10px;z-index:14;display:none;box-shadow:0 10px 34px #000a}
+.panel .ph{display:flex;align-items:center;gap:8px;font-size:13px;color:#cfd6ff;margin-bottom:6px;flex-wrap:wrap}
+.panel .priv{color:#6f7aa0;font-size:11px}
+.panel .tg{font-size:11px;color:#aeb6dc;margin-left:auto;display:flex;align-items:center;gap:4px}
+.panel .pi{padding:6px 0;border-bottom:1px solid #1c2138;font-size:13px;display:flex;justify-content:space-between;gap:8px}
+.panel .pi a{color:#9aa9ff;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.panel .pe{color:#6f7aa0;font-size:12px;padding:8px 0}
+.panel .x{color:#6f7aa0;cursor:pointer}
+.panel .x:hover{color:#ff8aa0}
+#star{cursor:pointer;color:#9aa9ff;font-size:22px;margin-left:10px;vertical-align:middle}
 """
 
 _TAB_JS = """
@@ -219,6 +231,42 @@ _TAB_JS = """
 })();
 """
 
+# History (private, on-device) + Favorites — pure client-side localStorage,
+# so this data NEVER leaves the machine (completely private by default).
+_PRIVACY_JS = """
+(function(){
+ var HK='rabbit_history',FK='rabbit_favorites',EK='rabbit_history_on';
+ function get(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}}
+ function set(k,v){localStorage.setItem(k,JSON.stringify(v))}
+ function on(){return localStorage.getItem(EK)!=='0'}
+ function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+ function curQ(){var p=new URLSearchParams(location.search);return (p.get('q')||'').trim()}
+ var q=curQ();
+ if(q&&on()){var h=get(HK).filter(function(e){return e.q!==q});h.unshift({q:q,t:Date.now()});set(HK,h.slice(0,100))}
+ function render(kind){
+  var p=document.getElementById('panel');if(!p)return;var rows='';
+  if(kind==='hist'){
+   rows='<div class=ph><b>History</b><span class=priv>private \\u00b7 on this device only</span>'
+     +'<label class=tg><input type=checkbox '+(on()?'checked':'')+' onclick="rabbitHistToggle(this)"> record</label>'
+     +'<span class=x onclick="rabbitClear()">clear</span></div>';
+   var H=get(HK);H.forEach(function(e){rows+='<div class=pi><a href="/search?q='+encodeURIComponent(e.q)+'">'+esc(e.q)+'</a></div>'});
+   if(!H.length)rows+='<div class=pe>no history</div>';
+  }else{
+   rows='<div class=ph><b>Favorites</b><span class=priv>saved on this device</span></div>';
+   var F=get(FK);F.forEach(function(e,i){rows+='<div class=pi><a href="/search?q='+encodeURIComponent(e.q)+'">'+esc(e.q)+'</a><span class=x onclick="rabbitUnfav('+i+')">\\u00d7</span></div>'});
+   if(!F.length)rows+='<div class=pe>no favorites yet \\u2014 star a search</div>';
+  }
+  p.innerHTML=rows;p.style.display='block';p.dataset.open=kind;
+ }
+ window.rabbitPanel=function(kind){var p=document.getElementById('panel');if(!p)return;if(p.dataset.open===kind){p.style.display='none';p.dataset.open='';return}render(kind)};
+ window.rabbitHistToggle=function(cb){localStorage.setItem(EK,cb.checked?'1':'0')};
+ window.rabbitClear=function(){set(HK,[]);render('hist')};
+ window.rabbitUnfav=function(i){var f=get(FK);f.splice(i,1);set(FK,f);render('fav')};
+ window.rabbitFav=function(){var x=curQ();if(!x)return;var f=get(FK);if(!f.some(function(e){return e.q===x})){f.unshift({q:x});set(FK,f)}var b=document.getElementById('star');if(b)b.textContent='\\u2605'};
+ var b=document.getElementById('star');if(b&&q&&get(FK).some(function(e){return e.q===q}))b.textContent='\\u2605';
+})();
+"""
+
 
 def _ip_bar() -> str:
     cls = _classify(_all_local_ips())
@@ -235,6 +283,8 @@ def _home_page() -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Rabbit</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
+<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button></div>
+<div id="panel" class="panel"></div>
 <div class="logo">🐰 <b>Rabbit</b></div>
 <div class="tag">sovereign search — your own masks, your own HTTP</div>
 <form action="/search" method="get" autocomplete="off">
@@ -246,6 +296,7 @@ def _home_page() -> str:
 </form>
 {_ip_bar()}
 <script>{_TAB_JS}</script>
+<script>{_PRIVACY_JS}</script>
 </body></html>"""
 
 
@@ -269,12 +320,15 @@ def _results_page(query: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
+<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button></div>
+<div id="panel" class="panel"></div>
 <div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Rabbit</b></div>
 <form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
- value="{html.escape(query)}"></form>
+ value="{html.escape(query)}"><span id="star" onclick="rabbitFav()" title="Save to favorites">&#9734;</span></form>
 <div class="res">{body}</div>
 {_ip_bar()}
 <script>{_TAB_JS}</script>
+<script>{_PRIVACY_JS}</script>
 </body></html>"""
 
 
