@@ -5,6 +5,31 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
+def test_meaning_vectors_rank_by_meaning():
+    import importlib.util
+
+    import pytest
+
+    if not importlib.util.find_spec("numpy"):
+        pytest.skip("numpy not installed (meaning-vectors need it)")
+    sys.path.insert(0, r"C:\Users\Admin\Desktop\RabbitProject-clean")
+    from rabbitghost import semantic_search as ss
+
+    if ss._semantic_model() is None:
+        pytest.skip("trained model not available")
+
+    def R(title, snippet):
+        return type("R", (), {"title": title, "snippet": snippet, "url": "http://x"})()
+
+    ranked = ss.rerank(
+        "security threat defense",
+        [R("banana bread recipe", "cooking dessert sugar"),
+         R("network security threats", "firewall intrusion attack defense")],
+    )
+    assert ranked[0].title == "network security threats"
+    assert ranked[0]._rabbit_semantic > 0  # meaning-vectors contributed
+
+
 def test_semantic_search_imports_and_ranks():
     from rabbitghost import semantic_search as ss
 

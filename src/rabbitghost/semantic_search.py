@@ -48,16 +48,28 @@ def _sentiment(text: str) -> float:
     return (p - n) / (p + n)
 
 
+_MODEL = None
+_MODEL_TRIED = False
+
+
 def _semantic_model():
-    """Return a TRAINED SovereignSemanticModel if one is usable, else None.
-    Untrained model or missing numpy → None (we degrade to lexical+context)."""
+    """Load the bundled TRAINED SovereignSemanticModel (meaning-vectors). Cached once.
+    Missing model / numpy → None (rerank degrades to lexical+sentiment+intent)."""
+    global _MODEL, _MODEL_TRIED
+    if _MODEL_TRIED:
+        return _MODEL
+    _MODEL_TRIED = True
     try:
+        import os
+
         from rabbit.core.sovereign_semantic import SovereignSemanticModel
 
-        m = SovereignSemanticModel()
-        return m if getattr(m, "is_trained", False) else None
+        path = os.path.join(os.path.dirname(__file__), "data", "semantic_model.json")
+        m = SovereignSemanticModel.load(path)
+        _MODEL = m if (m is not None and getattr(m, "is_trained", False)) else None
     except Exception:
-        return None
+        _MODEL = None
+    return _MODEL
 
 
 _DOM_ENGINE = None
