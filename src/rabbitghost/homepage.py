@@ -1,0 +1,293 @@
+#!/usr/bin/env python
+"""
+Rabbit Home — a sovereign, Google-like home page.
+
+Pure-stdlib HTTP server (http.server) — no Flask, no Streamlit, no new deps.
+Serves Rabbit's own search homepage: ghost-rabbit logo + a centered search box
+that routes queries through the SovereignBrowserEngine (5-engine masks, Tor-by-
+default). Binds 0.0.0.0 so it is reachable by IP across LAN / Tailscale /
+WireGuard, and shows every address Rabbit is reachable at PLUS the current
+egress IP (what the ISP / Tor exit sees).
+"""
+from __future__ import annotations
+
+import html
+import os
+import socket
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+# ── IP discovery ─────────────────────────────────────────────────────────────
+def _primary_lan_ip() -> str:
+    """The LAN IP the OS would use to reach the internet (no traffic sent)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def _all_local_ips() -> list[str]:
+    ips: set[str] = set()
+    try:
+        host = socket.gethostname()
+        for fam, *_rest, sockaddr in socket.getaddrinfo(host, None):
+            if fam == socket.AF_INET:
+                ips.add(sockaddr[0])
+    except Exception:
+        pass
+    ips.add(_primary_lan_ip())
+    return sorted(ips)
+
+
+def _classify(ips: list[str]) -> dict[str, list[str]]:
+    # No Tailscale — Rabbit reaches across his OWN sovereign WireGuard PackMesh.
+    out: dict[str, list[str]] = {"lan": [], "wireguard": [], "loopback": []}
+    for ip in ips:
+        if ip.startswith("127."):
+            out["loopback"].append(ip)
+        elif ip.startswith("10.44."):
+            out["wireguard"].append(ip)          # Rabbit PackMesh default subnet
+        else:
+            out["lan"].append(ip)
+    return out
+
+
+_EGRESS_CACHE: dict = {"ip": None, "at": 0.0}
+
+
+def _egress_ip() -> str:
+    """What the outside world sees — via Rabbit's own sovereign HTTP (masked).
+    Cached 120s so it never blocks page renders (perf: was adding ~5s/request)."""
+    import time
+    if _EGRESS_CACHE["ip"] and (time.time() - _EGRESS_CACHE["at"] < 120):
+        return _EGRESS_CACHE["ip"]
+    val = "unknown (offline or fetch failed)"
+    try:
+        from rabbit.core.sovereign_downloader import sovereign_http_get
+        r = sovereign_http_get("https://api.ipify.org", connect_timeout=5, read_timeout=5)
+        if r.success and r.body:
+            val = r.body.decode(errors="replace").strip()
+    except Exception:
+        pass
+    _EGRESS_CACHE["ip"] = val
+    _EGRESS_CACHE["at"] = time.time()
+    return val
+
+
+def _search(query: str) -> list:
+    try:
+        from rabbit.research.sovereign_browser_engine import SovereignBrowserEngine
+        results = SovereignBrowserEngine().web_search(query)
+    except Exception as e:  # never let the page 500
+        return [type("E", (), {"title": "search error", "url": "", "snippet": str(e)})()]
+    try:  # semantic re-rank: meaning / context / sentiment (degrades, never breaks)
+        from rabbitghost import semantic_search as rabbit_search
+        return rabbit_search.rerank(query, results)
+    except Exception:
+        return results
+
+
+# ── Gojo boundary safeguard ──────────────────────────────────────────────────
+def _gojo_audit_path() -> str:
+    """Windows-safe absolute audit log path (avoids cwd-relative 'logs' failure)."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "RabbitGhost", "logs")
+    try:
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "security_audit.jsonl")
+    except Exception:
+        return ""  # MEMORY_MODE
+
+
+_GATE = None
+_GATE_TRIED = False
+
+
+def _gate():
+    global _GATE, _GATE_TRIED
+    if _GATE_TRIED:
+        return _GATE
+    _GATE_TRIED = True
+    try:
+        from rabbit.security.boundary.gojo_boundary import GojoBoundaryGate
+        ap = _gojo_audit_path()
+        _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()
+        print("🛡  Gojo boundary engaged — every request is gated, throttled, audited.")
+    except Exception as e:
+        print(f"[gojo] boundary unavailable — network access will be REFUSED, localhost only: {e}")
+        _GATE = None
+    return _GATE
+
+
+def _gojo_admits(client_ip: str, path: str) -> bool:
+    """Gojo gates every request. Fail-closed: if the guard can't load or errs,
+    only loopback is served — Rabbit is NEVER exposed to the network ungated."""
+    local = client_ip.startswith("127.")
+    gate = _gate()
+    if gate is None:
+        return local
+    if local:
+        source_class = "network_local"
+    elif client_ip.startswith("10.44."):
+        source_class = "network_mesh"      # WireGuard PackMesh peer (PSK-authenticated)
+    else:
+        source_class = "network_remote"
+    try:
+        verdict = gate.evaluate_request(
+            actor_role="anonymous_web",
+            action="homepage_get",
+            source_class=source_class,
+            metadata={"path": path, "client": client_ip},
+        )
+        return verdict.get("decision") == "allow"
+    except Exception:
+        return local  # guard error → fail closed to local-only
+
+
+# ── pages ────────────────────────────────────────────────────────────────────
+_PORT = 7654
+
+_CSS = """
+*{box-sizing:border-box;font-family:Segoe UI,Arial,sans-serif}
+body{margin:0;background:#0d1020;color:#e8e8f0;display:flex;flex-direction:column;
+ align-items:center;min-height:100vh}
+.logo{font-size:64px;margin-top:18vh;letter-spacing:1px}
+.logo b{color:#9aa9ff}
+.tag{color:#8890b0;margin:6px 0 26px}
+form{width:min(560px,92vw)}
+input[type=text]{width:100%;padding:15px 20px;border-radius:26px;border:1px solid #2a2f50;
+ background:#161a30;color:#fff;font-size:17px;outline:none}
+input[type=text]:focus{border-color:#9aa9ff;box-shadow:0 0 0 3px #9aa9ff22}
+.btns{margin-top:18px;text-align:center}
+button{background:#1b2140;color:#cfd6ff;border:1px solid #2a2f50;padding:10px 18px;
+ border-radius:8px;font-size:14px;cursor:pointer;margin:0 6px}
+button:hover{border-color:#9aa9ff}
+.ips{position:fixed;bottom:0;left:0;right:0;background:#0a0c18;border-top:1px solid #1c2138;
+ font-size:12px;color:#7e88ad;padding:8px 14px;display:flex;gap:18px;flex-wrap:wrap}
+.ips b{color:#9aa9ff}
+.res{width:min(680px,92vw);margin:26px 0 80px}
+.r{padding:12px 0;border-bottom:1px solid #1c2138}
+.r a{color:#9aa9ff;text-decoration:none;font-size:18px}
+.r .u{color:#5f7a55;font-size:12px;word-break:break-all}
+.r .s{color:#c2c8e0;font-size:14px;margin-top:3px}
+.r .b{color:#6f7aa0;font-size:11px;margin-top:4px;letter-spacing:.3px}
+"""
+
+
+def _ip_bar() -> str:
+    cls = _classify(_all_local_ips())
+    parts = [f"<span><b>egress (ISP/Tor sees):</b> {html.escape(_egress_ip())}</span>"]
+    label = {"lan": "LAN", "wireguard": "WireGuard", "loopback": "local"}
+    for k in ("lan", "wireguard", "loopback"):
+        if cls[k]:
+            joined = ", ".join(f"{ip}:{_PORT}" for ip in cls[k])
+            parts.append(f"<span><b>{label[k]}:</b> {html.escape(joined)}</span>")
+    return '<div class="ips">' + "".join(parts) + "</div>"
+
+
+def _home_page() -> str:
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<title>Rabbit</title><style>{_CSS}</style></head><body>
+<div class="logo">🐰 <b>Rabbit</b></div>
+<div class="tag">sovereign search — your own masks, your own HTTP</div>
+<form action="/search" method="get" autocomplete="off">
+  <input type="text" name="q" placeholder="Search the web through Rabbit…" autofocus>
+  <div class="btns">
+    <button type="submit">Rabbit Search</button>
+    <button type="submit" name="lucky" value="1">I'm Feeling Sovereign</button>
+  </div>
+</form>
+{_ip_bar()}
+</body></html>"""
+
+
+def _results_page(query: str) -> str:
+    rows = []
+    for r in _search(query):
+        title = html.escape(getattr(r, "title", "") or "(no title)")
+        url = html.escape(getattr(r, "url", "") or "")
+        snip = html.escape(getattr(r, "snippet", "") or "")
+        score = getattr(r, "_rabbit_score", None)
+        senti = getattr(r, "_rabbit_sentiment", None)
+        badge = ""
+        if score is not None:
+            mood = "😊 positive" if (senti or 0) > 0.15 else ("⚠ negative" if (senti or 0) < -0.15 else "· neutral")
+            sem = getattr(r, "_rabbit_semantic", 0.0)
+            meaning = f" · meaning {sem}" if sem else ""
+            badge = f'<div class="b">relevance {score}{meaning} · sentiment {senti} {mood}</div>'
+        rows.append(f'<div class="r"><a href="{url}">{title}</a>'
+                    f'<div class="u">{url}</div><div class="s">{snip}</div>{badge}</div>')
+    body = "".join(rows) or '<div class="r">no results</div>'
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
+<div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Rabbit</b></div>
+<form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
+ value="{html.escape(query)}"></form>
+<div class="res">{body}</div>
+{_ip_bar()}
+</body></html>"""
+
+
+class _Handler(BaseHTTPRequestHandler):
+    def _send(self, body: str, code: int = 200) -> None:
+        data = body.encode("utf-8", "replace")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if not _gojo_admits(self.client_address[0], parsed.path):
+            self._send("<h1>403 — Gojo boundary denied</h1>", 403)
+            return
+        if parsed.path in ("/", "/index.html"):
+            self._send(_home_page())
+        elif parsed.path == "/search":
+            q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
+            self._send(_home_page() if not q else _results_page(q))
+        else:
+            self._send("<h1>404</h1>", 404)
+
+    def log_message(self, *a):  # quiet
+        pass
+
+
+def serve(port: int = _PORT) -> None:
+    global _PORT
+    _PORT = port
+    httpd = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
+    # Pre-warm the dominance/intent engine in the background so the first search is fast.
+    try:
+        import threading as _t
+        from rabbitghost import semantic_search as rabbit_search
+        _t.Thread(target=rabbit_search.warm, daemon=True).start()
+    except Exception:
+        pass
+    cls = _classify(_all_local_ips())
+    print(f"🐰 Rabbit home page live — reachable by IP on port {port}:")
+    print(f"   local:     http://127.0.0.1:{port}")
+    for ip in cls["lan"] + cls["wireguard"]:
+        print(f"   by IP:     http://{ip}:{port}")
+    print(f"   egress IP (ISP/Tor sees): {_egress_ip()}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        httpd.shutdown()
+
+
+if __name__ == "__main__":
+    serve()

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rabbitghost"
+version = "0.1.0"
+description = "Sovereign stealth console + Google-like homepage + semantic search, built on the Rabbit mind."
+readme = "README.md"
+requires-python = ">=3.11"
+# Runtime dependency: the `rabbit` package (the mind) must be importable — see README.
+# The browsing/handshake path uses curl_cffi; OCR (optional) uses rapidocr-onnxruntime.
+dependencies = [
+    "curl_cffi",
+]
+
+[project.optional-dependencies]
+ocr = ["rapidocr-onnxruntime", "numpy", "scipy", "Pillow"]
+build = ["pyinstaller"]
+dev = ["pytest"]
+
+[project.scripts]
+rabbitghost = "rabbitghost.console:menu"
+rabbitghost-home = "rabbitghost.homepage:serve"
+
+[tool.setuptools.packages.find]
+where = ["src"]
