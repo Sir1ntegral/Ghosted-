@@ -22,6 +22,19 @@ import secrets
 import time
 from typing import Any
 
+# Rabbit's sovereign email domain — used for mesh (Layer A) addressing. This is an
+# internal/sovereign domain (no public DNS, no registration): every sovereign.dmn
+# message is a RABBIT-CIPHER-1 black box delivered peer-to-peer over WireGuard.
+# Functional EXTERNAL mail (e.g. GitHub verifications) would need a registered
+# public-TLD domain + MX records — .dmn cannot receive internet email (see #16).
+DOMAIN = "sovereign.dmn"
+
+
+def address(user: str) -> str:
+    """Qualify a bare username into a sovereign address: 'lucy' -> 'lucy@sovereign.dmn'."""
+    user = (user or "").strip()
+    return user if "@" in user else f"{user}@{DOMAIN}"
+
 
 def _mailbox_dir() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
@@ -47,7 +60,8 @@ def _open(token: str, passphrase: str) -> dict:
 
 def compose(to: str, subject: str, body: str, passphrase: str, sender: str = "me") -> str:
     """Return a sealed black-box token for one message (nothing is stored)."""
-    msg = {"to": to, "from": sender, "subject": subject, "body": body, "t": int(time.time())}
+    msg = {"to": address(to), "from": address(sender), "subject": subject,
+           "body": body, "t": int(time.time())}
     return _seal(msg, passphrase)
 
 
