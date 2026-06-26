@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import os
+import secrets
 import socket
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -332,6 +333,53 @@ def _results_page(query: str) -> str:
 </body></html>"""
 
 
+# ── app login gate ─────────────────────────────────────────────────────────
+# Localhost is always open (you're at the machine). Remote (LAN / WireGuard mesh)
+# must unlock with the vault master password — then it rides a session cookie.
+_SESSIONS: set = set()
+
+
+def _local_ip(ip: str) -> bool:
+    return ip.startswith("127.")
+
+
+def _cookie_token(handler) -> str:
+    for part in handler.headers.get("Cookie", "").split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == "rg_session":
+            return v
+    return ""
+
+
+def _is_authed(handler) -> bool:
+    ip = handler.client_address[0] if handler.client_address else ""
+    if _local_ip(ip):
+        return True
+    tok = _cookie_token(handler)
+    return bool(tok) and tok in _SESSIONS
+
+
+def _login_page(msg: str = "") -> str:
+    initd = True
+    try:
+        from rabbitghost import vault
+        initd = vault.is_initialized()
+    except Exception:
+        pass
+    note = "" if initd else '<div class="tag">no master password set yet — run <b>login</b> in the console first</div>'
+    err = f'<div class="tag" style="color:#ff8aa0">{html.escape(msg)}</div>' if msg else ""
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<title>Rabbit — unlock</title><style>{_CSS}</style></head><body>
+<div class="logo">🐰 <b>Rabbit</b></div>
+<div class="tag">remote access — unlock with your master password</div>
+<form action="/login" method="post" autocomplete="off">
+  <input type="password" name="pw" placeholder="master password" autofocus>
+  <div class="btns"><button type="submit">Unlock</button></div>
+</form>{note}{err}
+{_ip_bar()}
+</body></html>"""
+
+
 class _Handler(BaseHTTPRequestHandler):
     def _send(self, body: str, code: int = 200) -> None:
         data = body.encode("utf-8", "replace")
@@ -346,11 +394,41 @@ class _Handler(BaseHTTPRequestHandler):
         if not _gojo_admits(self.client_address[0], parsed.path):
             self._send("<h1>403 — Gojo boundary denied</h1>", 403)
             return
+        if not _is_authed(self):
+            self._send(_login_page())  # remote + not unlocked → master-password gate
+            return
         if parsed.path in ("/", "/index.html"):
             self._send(_home_page())
         elif parsed.path == "/search":
             q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
             self._send(_home_page() if not q else _results_page(q))
+        else:
+            self._send("<h1>404</h1>", 404)
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if not _gojo_admits(self.client_address[0], parsed.path):
+            self._send("<h1>403 — Gojo boundary denied</h1>", 403)
+            return
+        if parsed.path == "/login":
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            body = self.rfile.read(length).decode("utf-8", "replace") if length else ""
+            pw = (parse_qs(body).get("pw") or [""])[0]
+            ok = False
+            try:
+                from rabbitghost import vault
+                ok = vault.login(pw)
+            except Exception:
+                ok = False
+            if ok:
+                tok = secrets.token_urlsafe(32)
+                _SESSIONS.add(tok)
+                self.send_response(303)
+                self.send_header("Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict")
+                self.send_header("Location", "/")
+                self.end_headers()
+            else:
+                self._send(_login_page("wrong password"))
         else:
             self._send("<h1>404</h1>", 404)
 
