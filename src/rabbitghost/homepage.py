@@ -268,6 +268,24 @@ _PRIVACY_JS = """
 })();
 """
 
+# Lola voice — browser-native speech synthesis (no deps, no server audio).
+# Reads the results aloud (in case you don't want to read); click again to stop.
+_VOICE_JS = """
+window.rabbitSpeak=function(){
+ if(!('speechSynthesis' in window)){alert('voice not supported in this browser');return}
+ if(window.speechSynthesis.speaking){window.speechSynthesis.cancel();return}
+ var parts=[],rs=document.querySelectorAll('.r');
+ if(rs.length){rs.forEach(function(r){var a=r.querySelector('a'),s=r.querySelector('.s');parts.push((a?a.textContent:'')+'. '+(s?s.textContent:''))})}
+ else{parts.push('Rabbit sovereign search. Type a query to begin.')}
+ var u=new SpeechSynthesisUtterance(parts.join(' \\u2014 '));
+ u.rate=1.0;u.pitch=1.05;
+ var vs=window.speechSynthesis.getVoices();
+ var f=vs.filter(function(v){return /female|zira|hazel|susan|aria|eva/i.test(v.name)})[0];
+ if(f)u.voice=f;
+ window.speechSynthesis.speak(u);
+};
+"""
+
 
 def _ip_bar() -> str:
     cls = _classify(_all_local_ips())
@@ -284,7 +302,7 @@ def _home_page() -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Rabbit</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button></div>
+<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button></div>
 <div id="panel" class="panel"></div>
 <div class="logo">🐰 <b>Rabbit</b></div>
 <div class="tag">sovereign search — your own masks, your own HTTP</div>
@@ -298,6 +316,7 @@ def _home_page() -> str:
 {_ip_bar()}
 <script>{_TAB_JS}</script>
 <script>{_PRIVACY_JS}</script>
+<script>{_VOICE_JS}</script>
 </body></html>"""
 
 
@@ -321,7 +340,7 @@ def _results_page(query: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button></div>
+<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button></div>
 <div id="panel" class="panel"></div>
 <div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Rabbit</b></div>
 <form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
@@ -330,6 +349,7 @@ def _results_page(query: str) -> str:
 {_ip_bar()}
 <script>{_TAB_JS}</script>
 <script>{_PRIVACY_JS}</script>
+<script>{_VOICE_JS}</script>
 </body></html>"""
 
 
