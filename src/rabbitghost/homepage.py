@@ -325,7 +325,7 @@ def _home_page() -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Rabbit</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button></div>
+<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
 <div id="panel" class="panel"></div>
 <div class="logo">🐰 <b>Rabbit</b></div>
 <div class="tag">sovereign search — your own masks, your own HTTP</div>
@@ -366,7 +366,7 @@ def _results_page(query: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button></div>
+<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
 <div id="panel" class="panel"></div>
 <div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Rabbit</b></div>
 <form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
@@ -440,6 +440,29 @@ def _login_page(msg: str = "") -> str:
 </body></html>"""
 
 
+def _help_page() -> str:
+    from rabbitghost import help_text
+
+    rows = []
+    for cat, items in help_text.HELP.items():
+        rows.append(f'<div class="hc">{html.escape(cat)}</div>')
+        for cmd, summary, detail in items:
+            rows.append(f'<div class="hr"><b>{html.escape(cmd)}</b><span>{html.escape(summary)}</span>'
+                        f'<div class="hd">{html.escape(detail)}</div></div>')
+    body = "".join(rows)
+    extra = ("<style>.help{width:min(760px,92vw);margin:26px 0 90px}"
+             ".hc{color:#9aa9ff;font-size:18px;font-weight:600;margin:22px 0 8px}"
+             ".hr{padding:10px 0;border-bottom:1px solid #1c2138}"
+             ".hr b{color:#cfd6ff;font-size:14px}.hr span{color:#8890b5;font-size:13px;margin-left:10px}"
+             ".hd{color:#aeb6dc;font-size:13px;margin-top:5px;line-height:1.45}</style>")
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Rabbit — Help</title>
+<style>{_CSS}</style>{extra}</head><body>
+<div class="logo" style="font-size:40px;margin-top:7vh">🐰 <b>Rabbit</b> Help</div>
+<div class="tag">everything the app does</div>
+<div class="help">{body}<div class="hd" style="margin-top:24px">{html.escape(help_text.CAPABILITIES)}</div></div>
+</body></html>"""
+
+
 class _Handler(BaseHTTPRequestHandler):
     def _send(self, body: str, code: int = 200) -> None:
         data = body.encode("utf-8", "replace")
@@ -473,6 +496,8 @@ class _Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/search":
             q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
             self._send(_home_page() if not q else _results_page(q))
+        elif parsed.path == "/help":
+            self._send(_help_page())
         else:
             self._send("<h1>404</h1>", 404)
 

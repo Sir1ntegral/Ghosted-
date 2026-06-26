@@ -69,6 +69,7 @@ def menu() -> None:
           spool             store-and-forward outbox: pending count + online status
           identity [add|rm <email>]  use your own email (any kind, no IMAP/POP); @sovereign.dmn first
           status            posture
+          help [command]    full help — everything the app does (or detail for one command)
           quit              stand down (drops all ghost components for GC)
         """
     ).strip()
@@ -99,6 +100,9 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         return False
     elif cmd == "status":
         out({"active": g.is_active})
+    elif cmd == "help":
+        from rabbitghost import help_text
+        out(help_text.detail(rest) if rest.strip() else help_text.overview())
     elif cmd == "recon":
         out(g.recon(rest))
     elif cmd == "forge":
