@@ -12,6 +12,7 @@ only from Lucy's own desktop icon. Defensive/research use on Lucy's own device.
 """
 from __future__ import annotations
 
+import getpass
 import sys
 import textwrap
 
@@ -124,7 +125,7 @@ def menu() -> None:
             elif cmd == "encrypt":
                 import base64
                 from rabbit.core.crypto import encrypt
-                pw = input("passphrase: ").strip()
+                pw = getpass.getpass("passphrase: ").strip()
                 blob = encrypt(rest, pw)
                 tok = base64.b64encode(blob.to_bytes()).decode()
                 print({"sealed": tok})
@@ -132,19 +133,19 @@ def menu() -> None:
                 import base64
                 from rabbit.core.crypto import decrypt, EncryptedBlob
                 tok = input("sealed token: ").strip()
-                pw = input("passphrase: ").strip()
+                pw = getpass.getpass("passphrase: ").strip()
                 blob = EncryptedBlob.from_bytes(base64.b64decode(tok))
                 print({"opened": decrypt(blob, pw)})
             elif cmd in ("cloak", "uncloak"):
                 from rabbit.security.ghost.ghost_cloak import GhostCloak
                 if cmd == "cloak":
                     img, _, msg = rest.partition(" ")
-                    pw = input("passphrase: ").strip() or None
+                    pw = getpass.getpass("passphrase: ").strip() or None
                     out = img + ".cloaked.png"
                     GhostCloak(passphrase=pw).cloak_payload(img, msg.encode(), out)
                     print({"cloaked": out})
                 else:
-                    pw = input("passphrase: ").strip() or None
+                    pw = getpass.getpass("passphrase: ").strip() or None
                     raw_out = GhostCloak(passphrase=pw).extract_payload(rest)
                     print({"hidden": raw_out})
             else:

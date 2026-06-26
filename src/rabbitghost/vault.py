@@ -60,8 +60,8 @@ def is_initialized() -> bool:
 
 def initialize(passphrase: str) -> None:
     """Set the master password (once). Stores only an encrypted verifier."""
-    if not passphrase or len(passphrase) < 6:
-        raise ValueError("passphrase too short (min 6 chars)")
+    if not passphrase or len(passphrase) < 12:
+        raise ValueError("passphrase too short (min 12 chars — it seals the whole mesh + mail vault)")
     with open(_sentinel_path(), "w", encoding="ascii") as fh:
         fh.write(_seal(_SENTINEL, passphrase))
 
@@ -81,8 +81,8 @@ def change_password(old: str, new: str) -> bool:
     """Rotate the master password: verify old, re-seal the verifier AND the mesh."""
     if not login(old):
         return False
-    if not new or len(new) < 6:
-        raise ValueError("new passphrase too short (min 6 chars)")
+    if not new or len(new) < 12:
+        raise ValueError("new passphrase too short (min 12 chars)")
     mesh = None
     if has_mesh():
         mesh = unseal_mesh(old)

@@ -16,6 +16,8 @@ import os
 import secrets
 import socket
 import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -39,7 +41,14 @@ def _primary_lan_ip() -> str:
         s.close()
 
 
+_LOCAL_IPS_CACHE: dict = {"ips": None, "at": 0.0}
+
+
 def _all_local_ips() -> list[str]:
+    # Cached 60s: the getaddrinfo + UDP-socket enumeration was running on EVERY
+    # page render (egress was cached, this was missed). Local IPs rarely change.
+    if _LOCAL_IPS_CACHE["ips"] is not None and (time.time() - _LOCAL_IPS_CACHE["at"] < 60):
+        return _LOCAL_IPS_CACHE["ips"]
     ips: set[str] = set()
     try:
         host = socket.gethostname()
@@ -49,7 +58,10 @@ def _all_local_ips() -> list[str]:
     except Exception:
         pass
     ips.add(_primary_lan_ip())
-    return sorted(ips)
+    result = sorted(ips)
+    _LOCAL_IPS_CACHE["ips"] = result
+    _LOCAL_IPS_CACHE["at"] = time.time()
+    return result
 
 
 def _classify(ips: list[str]) -> dict[str, list[str]]:
@@ -114,21 +126,25 @@ def _gojo_audit_path() -> str:
 
 _GATE = None
 _GATE_TRIED = False
+_GATE_LOCK = threading.Lock()
 
 
 def _gate():
     global _GATE, _GATE_TRIED
-    if _GATE_TRIED:
+    if _GATE_TRIED:  # fast path
         return _GATE
-    _GATE_TRIED = True
-    try:
-        from rabbit.security.boundary.gojo_boundary import GojoBoundaryGate
-        ap = _gojo_audit_path()
-        _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()
-        print("🛡  Gojo boundary engaged — every request is gated, throttled, audited.")
-    except Exception as e:
-        print(f"[gojo] boundary unavailable — network access will be REFUSED, localhost only: {e}")
-        _GATE = None
+    with _GATE_LOCK:  # double-checked: only one thread constructs the gate
+        if _GATE_TRIED:
+            return _GATE
+        try:
+            from rabbit.security.boundary.gojo_boundary import GojoBoundaryGate
+            ap = _gojo_audit_path()
+            _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()
+            print("🛡  Gojo boundary engaged — every request is gated, throttled, audited.")
+        except Exception as e:
+            print(f"[gojo] boundary unavailable — network access will be REFUSED, localhost only: {e}")
+            _GATE = None
+        _GATE_TRIED = True  # set LAST, after _GATE is assigned
     return _GATE
 
 
@@ -142,7 +158,7 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
     if local:
         source_class = "network_local"
     elif client_ip.startswith("10.44."):
-        source_class = "network_mesh"      # WireGuard PackMesh peer (PSK-authenticated)
+        source_class = "network_mesh"      # 10.44.* = WireGuard mesh subnet (reachability, NOT crypto proof of identity — the WG tunnel authenticates the peer at the kernel; this prefix only routes trust tier)
     else:
         source_class = "network_remote"
     try:
@@ -324,7 +340,10 @@ def _results_page(query: str) -> str:
     rows = []
     for r in _search(query):
         title = html.escape(getattr(r, "title", "") or "(no title)")
-        url = html.escape(getattr(r, "url", "") or "")
+        raw_url = getattr(r, "url", "") or ""
+        url = html.escape(raw_url)
+        # XSS guard: only http(s)/relative hrefs are clickable; javascript:/data: → inert
+        href = url if raw_url.lower().startswith(("http://", "https://", "/")) else "#"
         snip = html.escape(getattr(r, "snippet", "") or "")
         score = getattr(r, "_rabbit_score", None)
         senti = getattr(r, "_rabbit_sentiment", None)
@@ -334,7 +353,7 @@ def _results_page(query: str) -> str:
             sem = getattr(r, "_rabbit_semantic", 0.0)
             meaning = f" · meaning {sem}" if sem else ""
             badge = f'<div class="b">relevance {score}{meaning} · sentiment {senti} {mood}</div>'
-        rows.append(f'<div class="r"><a href="{url}">{title}</a>'
+        rows.append(f'<div class="r"><a href="{href}">{title}</a>'
                     f'<div class="u">{url}</div><div class="s">{snip}</div>{badge}</div>')
     body = "".join(rows) or '<div class="r">no results</div>'
     return f"""<!doctype html><html><head><meta charset="utf-8">
@@ -356,7 +375,10 @@ def _results_page(query: str) -> str:
 # ── app login gate ─────────────────────────────────────────────────────────
 # Localhost is always open (you're at the machine). Remote (LAN / WireGuard mesh)
 # must unlock with the vault master password — then it rides a session cookie.
-_SESSIONS: set = set()
+_SESSIONS: dict = {}                 # token -> expiry epoch
+_SESSIONS_LOCK = threading.Lock()
+_SESSION_TTL = 12 * 3600             # sessions expire after 12h
+_SESSIONS_MAX = 1024                 # bound the map (anti-growth)
 
 
 def _local_ip(ip: str) -> bool:
@@ -376,7 +398,16 @@ def _is_authed(handler) -> bool:
     if _local_ip(ip):
         return True
     tok = _cookie_token(handler)
-    return bool(tok) and tok in _SESSIONS
+    if not tok:
+        return False
+    with _SESSIONS_LOCK:
+        exp = _SESSIONS.get(tok)
+        if exp is None:
+            return False
+        if exp <= time.time():           # expired → evict + deny
+            _SESSIONS.pop(tok, None)
+            return False
+        return True
 
 
 def _login_page(msg: str = "") -> str:
@@ -396,7 +427,6 @@ def _login_page(msg: str = "") -> str:
   <input type="password" name="pw" placeholder="master password" autofocus>
   <div class="btns"><button type="submit">Unlock</button></div>
 </form>{note}{err}
-{_ip_bar()}
 </body></html>"""
 
 
@@ -406,6 +436,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(data)
 
@@ -413,6 +446,14 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not _gojo_admits(self.client_address[0], parsed.path):
             self._send("<h1>403 — Gojo boundary denied</h1>", 403)
+            return
+        if parsed.path == "/logout":
+            with _SESSIONS_LOCK:
+                _SESSIONS.pop(_cookie_token(self), None)
+            self.send_response(303)
+            self.send_header("Set-Cookie", "rg_session=; Max-Age=0; Path=/")
+            self.send_header("Location", "/")
+            self.end_headers()
             return
         if not _is_authed(self):
             self._send(_login_page())  # remote + not unlocked → master-password gate
@@ -431,7 +472,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._send("<h1>403 — Gojo boundary denied</h1>", 403)
             return
         if parsed.path == "/login":
-            length = int(self.headers.get("Content-Length", "0") or 0)
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                self._send("<h1>400 — bad Content-Length</h1>", 400)
+                return
+            if length > 64 * 1024:  # a login body is < 1KB; cap to stop memory-DoS
+                self._send("<h1>413 — request too large</h1>", 413)
+                return
             body = self.rfile.read(length).decode("utf-8", "replace") if length else ""
             pw = (parse_qs(body).get("pw") or [""])[0]
             ok = False
@@ -442,7 +490,13 @@ class _Handler(BaseHTTPRequestHandler):
                 ok = False
             if ok:
                 tok = secrets.token_urlsafe(32)
-                _SESSIONS.add(tok)
+                now = time.time()
+                with _SESSIONS_LOCK:
+                    for _k in [k for k, v in _SESSIONS.items() if v <= now]:
+                        _SESSIONS.pop(_k, None)      # prune expired
+                    if len(_SESSIONS) >= _SESSIONS_MAX:
+                        _SESSIONS.clear()            # hard cap
+                    _SESSIONS[tok] = now + _SESSION_TTL
                 self.send_response(303)
                 self.send_header("Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict")
                 self.send_header("Location", "/")

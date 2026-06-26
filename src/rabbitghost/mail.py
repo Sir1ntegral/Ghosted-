@@ -18,6 +18,7 @@ import base64
 import glob
 import json
 import os
+import secrets
 import time
 from typing import Any
 
@@ -54,7 +55,7 @@ def send(to: str, subject: str, body: str, passphrase: str, sender: str = "me") 
     """Seal + drop the message into the local mailbox as a `.box` file. Returns its path.
     (Mesh delivery to a peer's mailbox is the same token over WireGuard — same black box.)"""
     token = compose(to, subject, body, passphrase, sender)
-    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}.box")
+    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box")
     with open(path, "w", encoding="ascii") as fh:
         fh.write(token)
     return path
@@ -64,7 +65,7 @@ def seal_inbound(raw_rfc822: str, passphrase: str) -> str:
     """Layer-B hook: black-box an externally-received (plaintext) email AT REST the
     moment it lands, so it never sits on disk readable."""
     msg = {"to": "me", "from": "external", "subject": "(external)", "body": raw_rfc822, "t": int(time.time())}
-    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}.box")
+    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box")
     with open(path, "w", encoding="ascii") as fh:
         fh.write(_seal(msg, passphrase))
     return path
