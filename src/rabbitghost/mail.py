@@ -1,0 +1,81 @@
+"""
+Sovereign black-box mail (Layer A: Rabbit ↔ Rabbit).
+
+Every message is a RABBIT-CIPHER-1 ciphertext at rest and on the wire. To anyone
+without the key — disk, network, a server, a thief — each message is an
+indistinguishable **black box**: no subject, no sender, no body, just opaque bytes.
+Only a holder of the passphrase/key opens it. End-to-end private, zero external
+infrastructure (delivery rides the WireGuard mesh).
+
+Layer B (a valid/functional external address that receives e.g. GitHub
+verification mail) requires a domain + MX + reachable SMTP receiver — see README /
+task #16. Inbound external mail is plaintext in transit (sender-controlled) but is
+black-boxed AT REST the instant it lands via `seal_inbound()`.
+"""
+from __future__ import annotations
+
+import base64
+import glob
+import json
+import os
+import time
+from typing import Any
+
+
+def _mailbox_dir() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "RabbitGhost", "mail")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _seal(obj: dict, passphrase: str) -> str:
+    """Serialise + RABBIT-CIPHER-1 encrypt → opaque base64 token (the black box)."""
+    from rabbit.core.crypto import encrypt
+
+    blob = encrypt(json.dumps(obj, ensure_ascii=False), passphrase)
+    return base64.b64encode(blob.to_bytes()).decode()
+
+
+def _open(token: str, passphrase: str) -> dict:
+    from rabbit.core.crypto import EncryptedBlob, decrypt
+
+    blob = EncryptedBlob.from_bytes(base64.b64decode(token))
+    return json.loads(decrypt(blob, passphrase))
+
+
+def compose(to: str, subject: str, body: str, passphrase: str, sender: str = "me") -> str:
+    """Return a sealed black-box token for one message (nothing is stored)."""
+    msg = {"to": to, "from": sender, "subject": subject, "body": body, "t": int(time.time())}
+    return _seal(msg, passphrase)
+
+
+def send(to: str, subject: str, body: str, passphrase: str, sender: str = "me") -> str:
+    """Seal + drop the message into the local mailbox as a `.box` file. Returns its path.
+    (Mesh delivery to a peer's mailbox is the same token over WireGuard — same black box.)"""
+    token = compose(to, subject, body, passphrase, sender)
+    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}.box")
+    with open(path, "w", encoding="ascii") as fh:
+        fh.write(token)
+    return path
+
+
+def seal_inbound(raw_rfc822: str, passphrase: str) -> str:
+    """Layer-B hook: black-box an externally-received (plaintext) email AT REST the
+    moment it lands, so it never sits on disk readable."""
+    msg = {"to": "me", "from": "external", "subject": "(external)", "body": raw_rfc822, "t": int(time.time())}
+    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}.box")
+    with open(path, "w", encoding="ascii") as fh:
+        fh.write(_seal(msg, passphrase))
+    return path
+
+
+def inbox() -> list[str]:
+    """Paths of all black-box messages (opaque until opened)."""
+    return sorted(glob.glob(os.path.join(_mailbox_dir(), "*.box")))
+
+
+def read(path: str, passphrase: str) -> dict[str, Any]:
+    """Open one black box with the key."""
+    with open(path, "r", encoding="ascii") as fh:
+        return _open(fh.read(), passphrase)
