@@ -183,6 +183,40 @@ button:hover{border-color:#9aa9ff}
 .r .u{color:#5f7a55;font-size:12px;word-break:break-all}
 .r .s{color:#c2c8e0;font-size:14px;margin-top:3px}
 .r .b{color:#6f7aa0;font-size:11px;margin-top:4px;letter-spacing:.3px}
+.tabbar{position:fixed;top:0;left:0;right:0;display:flex;gap:2px;background:#0a0c18;border-bottom:1px solid #1c2138;padding:6px 8px 0;overflow-x:auto;z-index:10}
+.tab{display:flex;align-items:center;gap:6px;background:#161a30;color:#aeb6dc;border:1px solid #1c2138;border-bottom:none;border-radius:8px 8px 0 0;padding:7px 12px;font-size:13px;white-space:nowrap;cursor:pointer}
+.tab.active{background:#1b2140;color:#fff;border-color:#2a2f50}
+.tab .t{overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.tab .x{color:#6f7aa0;font-weight:bold}
+.tab .x:hover{color:#ff8aa0}
+.newtab{background:#161a30;color:#9aa9ff;border:1px solid #1c2138;border-bottom:none;border-radius:8px 8px 0 0;padding:7px 12px;cursor:pointer;font-size:15px}
+body{padding-top:44px}
+"""
+
+_TAB_JS = """
+(function(){
+ var KEY='rabbit_tabs';
+ function load(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return[]}}
+ function save(t){localStorage.setItem(KEY,JSON.stringify(t))}
+ function cur(){var p=new URLSearchParams(location.search);return (p.get('q')||'').trim()}
+ function render(){
+  var tabs=load(),q=cur(),bar=document.getElementById('tabbar');if(!bar)return;
+  if(q&&!tabs.some(function(t){return t.q===q})){tabs.push({q:q});save(tabs)}
+  bar.innerHTML='';
+  tabs.forEach(function(t){
+   var d=document.createElement('div');d.className='tab'+(t.q===q?' active':'');
+   var s=document.createElement('span');s.className='t';s.textContent=t.q;s.title=t.q;
+   s.onclick=function(){location.href='/search?q='+encodeURIComponent(t.q)};
+   var x=document.createElement('span');x.className='x';x.textContent='\\u00d7';
+   x.onclick=function(e){e.stopPropagation();var n=load().filter(function(u){return u.q!==t.q});save(n);
+    if(t.q===q){location.href=n.length?'/search?q='+encodeURIComponent(n[n.length-1].q):'/'}else{render()}};
+   d.appendChild(s);d.appendChild(x);bar.appendChild(d);
+  });
+  var nt=document.createElement('div');nt.className='newtab';nt.textContent='+';nt.title='New tab';
+  nt.onclick=function(){location.href='/'};bar.appendChild(nt);
+ }
+ render();
+})();
 """
 
 
@@ -200,6 +234,7 @@ def _ip_bar() -> str:
 def _home_page() -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Rabbit</title><style>{_CSS}</style></head><body>
+<div id="tabbar" class="tabbar"></div>
 <div class="logo">🐰 <b>Rabbit</b></div>
 <div class="tag">sovereign search — your own masks, your own HTTP</div>
 <form action="/search" method="get" autocomplete="off">
@@ -210,6 +245,7 @@ def _home_page() -> str:
   </div>
 </form>
 {_ip_bar()}
+<script>{_TAB_JS}</script>
 </body></html>"""
 
 
@@ -232,11 +268,13 @@ def _results_page(query: str) -> str:
     body = "".join(rows) or '<div class="r">no results</div>'
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
+<div id="tabbar" class="tabbar"></div>
 <div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Rabbit</b></div>
 <form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
  value="{html.escape(query)}"></form>
 <div class="res">{body}</div>
 {_ip_bar()}
+<script>{_TAB_JS}</script>
 </body></html>"""
 
 
