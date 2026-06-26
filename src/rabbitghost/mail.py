@@ -18,6 +18,7 @@ import base64
 import glob
 import json
 import os
+import re
 import secrets
 import time
 from typing import Any
@@ -34,6 +35,69 @@ def address(user: str) -> str:
     """Qualify a bare username into a sovereign address: 'lucy' -> 'lucy@sovereign.dmn'."""
     user = (user or "").strip()
     return user if "@" in user else f"{user}@{DOMAIN}"
+
+
+# ── identities (bring-your-own-email) ────────────────────────────────────────
+# Users may register their OWN address of any kind (gmail / proton / outlook /
+# custom). It is stored as an IDENTITY ONLY — no password, NO IMAP, NO POP. Rabbit
+# never logs into a third-party inbox; the address is just a from/identity label.
+# The sovereign @sovereign.dmn address is always suggested FIRST.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _data_root() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "RabbitGhost")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _identities_path() -> str:
+    return os.path.join(_data_root(), "identities.json")
+
+
+def _load_ids() -> list:
+    try:
+        with open(_identities_path(), encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return []
+
+
+def _save_ids(ids: list) -> None:
+    with open(_identities_path(), "w", encoding="utf-8") as fh:
+        json.dump(ids, fh)
+
+
+def add_identity(addr: str) -> str:
+    """Register an email identity the user owns — ANY provider. No password/IMAP/POP
+    is ever requested or stored; it's an identity label only. Returns the address."""
+    addr = (addr or "").strip()
+    if not _EMAIL_RE.match(addr):
+        raise ValueError("not a valid email address")
+    ids = _load_ids()
+    if addr.lower() not in (x.lower() for x in ids):
+        ids.append(addr)
+        _save_ids(ids)
+    return addr
+
+
+def remove_identity(addr: str) -> bool:
+    addr = (addr or "").strip().lower()
+    ids = _load_ids()
+    kept = [x for x in ids if x.lower() != addr]
+    if len(kept) != len(ids):
+        _save_ids(kept)
+        return True
+    return False
+
+
+def identities() -> list:
+    """All usable from-identities. The sovereign @sovereign.dmn address is suggested
+    FIRST, then the user's own registered addresses (identities only — no IMAP/POP)."""
+    own = _load_ids()
+    sovereign = address("me")
+    return [sovereign] + [a for a in own if a.lower() != sovereign.lower()]
 
 
 def _mailbox_dir() -> str:

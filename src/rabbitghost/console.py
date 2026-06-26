@@ -62,6 +62,7 @@ def menu() -> None:
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
           spool             store-and-forward outbox: pending count + online status
+          identity [add|rm <email>]  use your own email (any kind, no IMAP/POP); @sovereign.dmn first
           status            posture
           quit              stand down (drops all ghost components for GC)
         """
@@ -156,6 +157,16 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         from rabbitghost import transport
         sp = transport.Spool()
         out({"pending": len(sp), "online": transport.online()})
+    elif cmd == "identity":
+        from rabbitghost import mail
+        sub, _, arg = rest.partition(" ")
+        if sub == "add":
+            out({"added": mail.add_identity(arg)})
+        elif sub == "rm":
+            out({"removed": mail.remove_identity(arg)})
+        else:
+            out({"suggested": mail.address("me"), "identities": mail.identities(),
+                 "note": "no IMAP / no POP — identities only; @sovereign.dmn suggested first"})
     elif cmd == "parse":
         from rabbitghost import parser
         res = parser.parse(rest, max_chars=2000)
