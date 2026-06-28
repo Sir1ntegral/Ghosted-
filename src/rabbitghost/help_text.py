@@ -155,10 +155,10 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
         ),
         (
             "doctor",
-            "report which rabbit organs are wired",
-            "Checks every declared contract between RabbitGhost and the rabbit mind and reports "
-            "what is importable + exposes the expected surface — so you can see exactly which "
-            "capabilities are fully wired and which would degrade on this host.",
+            "report which capabilities are wired (+ optional deps)",
+            "Checks every declared capability — each backed by one of Ghosted's own modules — "
+            "and reports whether it is importable and whether its optional backing library is "
+            "installed, so you can see exactly what works now and what `pip install` would unlock.",
         ),
     ],
     "Session": [

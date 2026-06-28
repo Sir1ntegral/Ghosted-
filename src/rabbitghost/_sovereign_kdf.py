@@ -441,7 +441,7 @@ class SovereignKDF:
 
     Example — basic usage::
 
-        from rabbit.core.sovereign_kdf import SovereignKDF, KDFPreset
+        from rabbitghost._sovereign_kdf import SovereignKDF, KDFPreset
         import os
 
         kdf = SovereignKDF(KDFPreset.INTERACTIVE)
@@ -515,7 +515,7 @@ class SovereignKDF:
             progress_cb:  Optional callable(float) invoked periodically with
                           a fraction 0.0–1.0.  Useful for progress bars.
             verbose:      When True, emits a full derivation report to the
-                          ``rabbit.core.sovereign_kdf`` logger at DEBUG level.
+                          ``rabbitghost._sovereign_kdf`` logger at DEBUG level.
                           Never includes key material.
 
         Returns:

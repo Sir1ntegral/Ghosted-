@@ -32,6 +32,6 @@ def test_ocr_extracts_text_from_image(tmp_path):
 
     res = parser.parse_file(p)
     assert res["type"] == "image"
-    assert res.get("backend") == "RABBIT-OCR-1"
+    assert res.get("backend") == "ghosted-ocr"
     txt = (res.get("text") or "").upper()
     assert ("RABBIT" in txt) or ("OCR" in txt) or ("WORKS" in txt)

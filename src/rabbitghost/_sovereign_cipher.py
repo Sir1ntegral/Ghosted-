@@ -300,7 +300,7 @@ class SovereignChaCha20Poly1305:
 
     Example::
 
-        from rabbit.core.sovereign_cipher import SovereignChaCha20Poly1305
+        from rabbitghost._sovereign_cipher import SovereignChaCha20Poly1305
         import os
 
         key     = os.urandom(32)

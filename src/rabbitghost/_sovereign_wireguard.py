@@ -23,7 +23,7 @@ WHAT THIS IS *NOT* (honest boundary)
     The two are separate tools for separate jobs and must not be conflated.
 
 USAGE
-    from rabbit.network.sovereign_wireguard import PackMesh
+    from rabbitghost.wireguard import PackMesh
     mesh = PackMesh(subnet="10.44.0.0/24")
     mesh.add_device("nuc",    endpoint="nuc.example:51820", listen_port=51820)
     mesh.add_device("laptop")

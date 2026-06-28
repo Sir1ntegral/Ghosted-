@@ -107,7 +107,7 @@ def _egress_ip() -> str:
 
 def _search(query: str) -> list:
     try:
-        from rabbit.research.sovereign_browser_engine import SovereignBrowserEngine
+        from rabbitghost.web import SovereignBrowserEngine
 
         results = SovereignBrowserEngine().web_search(query)
     except Exception as e:  # never let the page 500
