@@ -1,29 +1,28 @@
 <#
 .SYNOPSIS
-  Self-adapting installer for RabbitGhost — no external installer tooling required
+  Self-adapting installer for Ghosted — no external installer tooling required
   (no Inno Setup). It TESTS the system it is stored on and ADAPTS:
 
     * OS / architecture            -> verifies a Windows x64 host for the bundled .exe
     * the drive the repo lives on  -> picks an install root with enough free space
     * privileges                   -> per-user install by default (no admin needed);
                                       uses Program Files only when admin + requested
-    * existing build               -> installs dist\RabbitGhost if present; otherwise
+    * existing build               -> installs dist\Ghosted if present; otherwise
                                       builds it (when Python + PyInstaller are available)
 
   Then it copies the onedir bundle to the chosen location and creates a Desktop
   shortcut + Start-Menu shortcut with the ghost-rabbit icon.
 
 .EXAMPLE
-  .\Install-RabbitGhost.ps1                 # detect, adapt, install, make desktop icon
-  .\Install-RabbitGhost.ps1 -DetectOnly     # print a JSON system report and exit (smoke)
-  .\Install-RabbitGhost.ps1 -WhatIf         # show the plan without changing anything
-  .\Install-RabbitGhost.ps1 -Build -Lean    # force a fresh lean build, then install
-  .\Install-RabbitGhost.ps1 -Uninstall      # remove the install + shortcuts
+  .\Install-Ghosted.ps1                 # detect, adapt, install, make desktop icon
+  .\Install-Ghosted.ps1 -DetectOnly     # print a JSON system report and exit (smoke)
+  .\Install-Ghosted.ps1 -WhatIf         # show the plan without changing anything
+  .\Install-Ghosted.ps1 -Build -Lean    # force a fresh lean build, then install
+  .\Install-Ghosted.ps1 -Uninstall      # remove the install + shortcuts
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$InstallRoot,
-    [string]$RabbitHome,
     [switch]$Lean,
     [switch]$Build,
     [switch]$DetectOnly,
@@ -31,7 +30,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AppName = "RabbitGhost"
+$AppName = "Ghosted"
 $Exe = "$AppName.exe"
 $repo = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -113,7 +112,7 @@ function New-Shortcut([string]$lnkPath, [string]$target, [string]$icon, [string]
     $sc.TargetPath = $target
     $sc.WorkingDirectory = $workdir
     if ($icon -and (Test-Path $icon)) { $sc.IconLocation = $icon }
-    $sc.Description = "RabbitGhost — sovereign stealth console"
+    $sc.Description = "Ghosted — sovereign stealth console"
     $sc.Save()
 }
 
@@ -126,8 +125,8 @@ if ($DetectOnly) {
 }
 
 $dest = Resolve-InstallRoot $sys
-$desktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Rabbit Ghost.lnk"
-$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) "Rabbit Ghost.lnk"
+$desktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Ghosted.lnk"
+$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) "Ghosted.lnk"
 $installedExe = Join-Path $dest $Exe
 $installedIcon = Join-Path $dest "ghost_rabbit.ico"
 
@@ -157,7 +156,6 @@ if ($Build -or -not $sys.builtExists) {
     }
     $buildArgs = @{}
     if ($Lean) { $buildArgs['Lean'] = $true }
-    if ($RabbitHome) { $buildArgs['RabbitHome'] = $RabbitHome }
     Write-Host "Building $AppName ($(if ($Lean) { 'lean' } else { 'full' })) ..."
     if ($PSCmdlet.ShouldProcess("$repo\build.ps1", "Run PyInstaller build")) {
         & (Join-Path $repo "build.ps1") @buildArgs
@@ -184,7 +182,7 @@ if ($PSCmdlet.ShouldProcess($dest, "Copy bundle + create shortcuts")) {
     if ($sys.appControl -in @("enforced", "evaluation")) {
         Write-Warning (
             "Smart App Control / WDAC is '$($sys.appControl)' on this host — it may block the " +
-            "unsigned RabbitGhost.exe. If launching is blocked, either code-sign the bundle, or " +
+            "unsigned Ghosted.exe. If launching is blocked, either code-sign the bundle, or " +
             "run from source: `$env:PYTHONPATH='<repo>\src;<rabbit-tree>'; python -m ghosted.console"
         )
     }
