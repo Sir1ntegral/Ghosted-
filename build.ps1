@@ -68,4 +68,8 @@ $args += @(
 )
 
 python -m PyInstaller @args
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE) — see output above." }
+if (-not (Test-Path "$repo\dist\RabbitGhost\RabbitGhost.exe")) {
+    throw "PyInstaller reported success but $repo\dist\RabbitGhost\RabbitGhost.exe is missing."
+}
 Write-Host "Build complete -> $repo\dist\RabbitGhost\RabbitGhost.exe"

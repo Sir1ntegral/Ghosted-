@@ -52,6 +52,18 @@ function Get-SystemReport {
     if ($py) {
         try { python -c "import PyInstaller" 2>$null; $hasPyInstaller = ($LASTEXITCODE -eq 0) } catch {}
     }
+    # Smart App Control / WDAC blocks unsigned exes from user-writable paths — detect
+    # it so we can warn that the bundle may need signing or a trusted install location.
+    $appControl = "unknown"
+    if ($isWin) {
+        try {
+            $v = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" `
+                    -Name VerifiedAndReputablePolicyState -ErrorAction Stop`
+                ).VerifiedAndReputablePolicyState
+            $appControl = @{0 = "off"; 1 = "enforced"; 2 = "evaluation" }[[int]$v]
+            if (-not $appControl) { $appControl = "state=$v" }
+        } catch { $appControl = "off-or-unset" }
+    }
     $repoDrive = (Split-Path -Qualifier $repo)
     $localApp = $env:LOCALAPPDATA
     if (-not $localApp) { $localApp = Join-Path $HOME "AppData\Local" }
@@ -67,6 +79,7 @@ function Get-SystemReport {
         osVersion      = [Environment]::OSVersion.Version.ToString()
         isWindows      = $isWin
         arch           = $env:PROCESSOR_ARCHITECTURE
+        appControl     = $appControl
         admin          = $admin
         repo           = $repo
         repoDrive      = $repoDrive
@@ -168,4 +181,11 @@ if ($PSCmdlet.ShouldProcess($dest, "Copy bundle + create shortcuts")) {
     New-Shortcut $startMenu $installedExe $installedIcon $dest
     Write-Host "Installed. Desktop icon: $desktopLnk"
     Write-Host "Launch: `"$installedExe`""
+    if ($sys.appControl -in @("enforced", "evaluation")) {
+        Write-Warning (
+            "Smart App Control / WDAC is '$($sys.appControl)' on this host — it may block the " +
+            "unsigned RabbitGhost.exe. If launching is blocked, either code-sign the bundle, or " +
+            "run from source: `$env:PYTHONPATH='<repo>\src;<rabbit-tree>'; python -m rabbitghost.console"
+        )
+    }
 }
