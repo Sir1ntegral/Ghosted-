@@ -156,7 +156,7 @@ def _gate():
             )
         except Exception as e:
             print(
-                f"[gojo] boundary unavailable — network access will be REFUSED, localhost only: {e}"
+                f"[gojo] boundary unavailable — remote access gated by master password only: {e}"
             )
             _GATE = None
         _GATE_TRIED = True  # set LAST, after _GATE is assigned
@@ -164,15 +164,28 @@ def _gate():
 
 
 def _gojo_admits(client_ip: str, path: str) -> bool:
-    """Gojo gates every *network* request. Loopback is the local operator at the
-    machine — always admitted (auth for it is handled separately by _is_authed).
-    Fail-closed: for any non-local request, if the guard can't load or errs the
-    request is REFUSED — Rabbit is NEVER exposed to the network ungated."""
+    """Admission for a network request.
+
+    Ghosted is a standalone Windows app: its real remote access control is the
+    master-password session gate (_is_authed) plus the brute-force lockout and
+    body cap in do_POST. The rabbit Gojo/Madara boundary is an OPTIONAL extra
+    DoS/reputation layer used when the rabbit mind is present and has been
+    integrated. It is therefore ADVISORY here:
+
+      * loopback (the operator at the machine) is always admitted;
+      * a genuine boundary deny (throttle / role / source-class) is honored;
+      * "not present" (standalone) or "unknown_action" (rabbit not yet
+        integrated to know homepage_get) must NOT hard-block — otherwise a
+        remote peer can't even reach the login form. _is_authed still gates
+        all content behind the master password.
+
+    Registering homepage_get in rabbit's ingress_policy.json is deferred to the
+    integration pass; until then the boundary advises but never locks out."""
     if client_ip.startswith("127."):
         return True  # loopback = at the machine; not network exposure
     gate = _gate()
     if gate is None:
-        return False  # non-local + no guard → fail closed
+        return True  # standalone (no rabbit boundary) — _is_authed enforces the remote gate
     if client_ip.startswith("10.44."):
         source_class = "network_mesh"  # 10.44.* = WireGuard mesh subnet (reachability, NOT crypto proof of identity — the WG tunnel authenticates the peer at the kernel; this prefix only routes trust tier)
     else:
@@ -184,9 +197,14 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
             source_class=source_class,
             metadata={"path": path, "client": client_ip},
         )
-        return verdict.get("decision") == "allow"
+        if verdict.get("decision") == "allow":
+            return True
+        # Pre-integration: rabbit doesn't yet know this action. Advise, don't lock out.
+        return verdict.get("reason") == "unknown_action"
     except Exception:
-        return False  # guard error on a network request → fail closed
+        return (
+            True  # boundary error must not harden a standalone install into local-only
+        )
 
 
 # ── pages ────────────────────────────────────────────────────────────────────
