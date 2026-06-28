@@ -61,6 +61,12 @@ def menu() -> None:
             "        Running with reduced commands — the rabbit mind isn't importable.\n"
             "        Stdlib commands (connect/spool/contacts/filters/identity/parse) still work."
         )
+    try:  # auto-complete spooled mesh-mail / fetch the instant connectivity returns
+        from rabbitghost import flusher
+
+        flusher.start_autoflush()
+    except Exception:
+        pass
     actions = textwrap.dedent(
         """
         commands:
@@ -74,6 +80,8 @@ def menu() -> None:
           encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
+          scan <path> [q]   EDR-lite file safety check (q = quarantine if malicious)
+          doctor            report which rabbit organs/contracts are wired
           connect           check internet across wifi/LAN/WAN (multi-interface)
           hotspot           start a WiFi hotspot for the mesh (Windows, needs admin)
           contacts          list saved contacts
@@ -81,6 +89,9 @@ def menu() -> None:
           mail [sub]        black-box mail: inbox|read|compose|send <peer>|ext|pull <imap|pop>
           mailsearch <q>    search your black-box mail (needs passphrase)
           spool             store-and-forward outbox: pending count + online status
+          flush             flush spooled mesh-mail + fetch now (store-and-forward)
+          mesh [export]     mesh status, or export sealed configs to .conf (login)
+          passwd            rotate the master password (re-seals the mesh)
           identity [add|rm <email>]  use your own email (any kind, no IMAP/POP); @sovereign.dmn first
           status            posture
           help [command]    full help — everything the app does (or detail for one command)
@@ -199,6 +210,69 @@ def handle_command(
 
         sp = transport.Spool()
         out({"pending": len(sp), "online": transport.online()})
+    elif cmd == "flush":
+        from rabbitghost import flusher
+
+        out(flusher.flush_all())
+    elif cmd == "mesh":
+        from rabbitghost import vault
+
+        sub, _, arg = rest.partition(" ")
+        sub = sub.strip().lower()
+        if sub in ("", "status"):
+            out({"has_mesh": vault.has_mesh()})
+        elif sub == "export":
+            if not vault.has_mesh():
+                out("no mesh sealed yet — run 'network' first")
+                return True
+            try:
+                configs = vault.unseal_mesh(getpw("master password: "))
+            except Exception:
+                out({"mesh": "wrong password or vault locked"})
+                return True
+            target = arg.strip() or os.path.join(
+                os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+                "RabbitGhost",
+                "mesh-export",
+            )
+            os.makedirs(target, exist_ok=True)
+            written = []
+            for name, conf in configs.items():
+                import json as _json
+
+                p = os.path.join(target, f"{name}.conf")
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write(
+                        conf if isinstance(conf, str) else _json.dumps(conf, indent=2)
+                    )
+                written.append(p)
+            out(
+                {"exported": written, "import_into": "WireGuard — Add Tunnel from file"}
+            )
+        else:
+            out(f"unknown mesh subcommand: {sub} (status|export [dir])")
+    elif cmd == "passwd":
+        from rabbitghost import vault
+
+        if not vault.is_initialized():
+            out("no master password set yet — run 'login' first")
+            return True
+        old = getpw("current master password: ")
+        new = getpw("new master password: ")
+        if new != getpw("confirm new master password: "):
+            out({"vault": "new passwords do not match"})
+            return True
+        try:
+            ok = vault.change_password(old, new)
+        except ValueError as e:
+            out({"vault": str(e)})
+            return True
+        if ok:
+            if session.get("pw"):
+                session["pw"] = new
+            out({"vault": "password rotated (mesh re-sealed)"})
+        else:
+            out({"vault": "current password incorrect"})
     elif cmd == "identity":
         from rabbitghost import mail
 
@@ -330,6 +404,16 @@ def handle_command(
         if "error" in res:
             info["error"] = res["error"]
         out(info)
+    elif cmd == "scan":
+        from rabbitghost import scan as _scan
+
+        target, _, opt = rest.partition(" ")
+        quarantine = opt.strip().lower() in ("q", "-q", "quarantine")
+        out(_scan.scan_file(target.strip(), quarantine=quarantine))
+    elif cmd == "doctor":
+        from rabbitghost import contracts
+
+        out(contracts.verify_contracts())
     else:
         out(f"unknown: {cmd}")
     return True

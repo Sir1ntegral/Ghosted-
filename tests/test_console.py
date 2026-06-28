@@ -173,3 +173,88 @@ def test_commands_tolerate_missing_ghost():
     call("recon", "x")
     assert "unavailable" in out[-1]
     assert call("quit") is False  # quit still exits cleanly
+
+
+# ── Tier 2: store-and-forward flush + mesh actuation + password rotation ──────
+def test_flush_offline(monkeypatch):
+    monkeypatch.setattr("rabbitghost.transport.online", lambda *a, **k: False)
+    _, out, _ = run("flush")
+    assert out[0] == {"online": False}
+
+
+def test_mesh_status_no_mesh(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    _, out, _ = run("mesh")
+    assert out[0] == {"has_mesh": False}
+
+
+def test_mesh_export_requires_mesh(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    _, out, _ = run("mesh", "export")
+    assert "no mesh sealed" in out[0]
+
+
+def test_mesh_export_writes_confs(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    from rabbitghost import vault
+
+    vault.initialize("MeshExportKey1")
+    vault.build_and_seal_mesh(
+        [("tower", "1.2.3.4:51820"), ("phone", "")], "MeshExportKey1"
+    )
+    dest = str(tmp_path / "confs")
+    _, out, _ = run("mesh", f"export {dest}", pws=["MeshExportKey1"])
+    exported = out[-1]["exported"]
+    assert len(exported) >= 2
+    assert all(p.endswith(".conf") and os.path.exists(p) for p in exported)
+
+
+def test_passwd_requires_vault(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    _, out, _ = run("passwd")
+    assert "no master password set" in out[0]
+
+
+def test_passwd_rotates(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    from rabbitghost import vault
+
+    vault.initialize("OldMasterKey12")
+    _, out, _ = run(
+        "passwd", pws=["OldMasterKey12", "NewMasterKey34", "NewMasterKey34"]
+    )
+    assert "rotated" in out[-1]["vault"]
+    assert vault.login("NewMasterKey34") and not vault.login("OldMasterKey12")
+
+
+# ── Tier 4: contracts doctor + EDR-lite scan ─────────────────────────────────
+def test_doctor_reports_contracts():
+    _, out, _ = run("doctor")
+    rep = out[0]
+    assert rep["total"] >= 11 and "organs" in rep
+    assert rep["organs"]["crypto"]["ok"] is True  # rabbit mind present in test env
+
+
+def test_scan_clean_text(tmp_path):
+    f = tmp_path / "note.txt"
+    f.write_text("just some harmless notes", encoding="utf-8")
+    _, out, _ = run("scan", str(f))
+    assert out[0]["verdict"] == "clean" and out[0]["type"] == "data"
+
+
+def test_scan_detects_pe_masquerade(tmp_path):
+    f = tmp_path / "invoice.pdf"
+    f.write_bytes(b"MZ" + b"\x00" * 200)  # PE header, but .pdf extension
+    _, out, _ = run("scan", str(f))
+    assert out[0]["type"] == "pe-executable"
+    assert out[0]["verdict"] in ("suspicious", "malicious")
+    assert any("masquerad" in r for r in out[0]["reasons"])
+
+
+def test_scan_quarantines_malicious(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    f = tmp_path / "tool.exe"
+    f.write_bytes(b"MZ" + b"\x00" * 500)  # risky extension + PE -> malicious
+    _, out, _ = run("scan", f"{f} q")
+    assert out[0]["verdict"] == "malicious" and "quarantined" in out[0]
+    assert not f.exists() and os.path.exists(out[0]["quarantined"])

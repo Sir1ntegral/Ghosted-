@@ -91,7 +91,7 @@ def change_password(old: str, new: str) -> bool:
         mesh = unseal_mesh(old)
     initialize(new)
     if mesh is not None:
-        seal_mesh(mesh, new)
+        _write_mesh(mesh, new)  # 'new' was just set as the verifier; skip re-login KDF
     return True
 
 
@@ -100,12 +100,18 @@ def has_mesh() -> bool:
     return os.path.exists(_mesh_path())
 
 
+def _write_mesh(configs: dict, passphrase: str) -> None:
+    """Seal + write the mesh vault (no login check — callers that already verified the
+    passphrase use this to avoid a redundant RABBIT-KDF pass)."""
+    with open(_mesh_path(), "w", encoding="ascii") as fh:
+        fh.write(_seal(configs, passphrase))
+
+
 def seal_mesh(configs: dict, passphrase: str) -> None:
     """Seal the per-device WireGuard configs at rest. Requires a valid login."""
     if not login(passphrase):
         raise PermissionError("vault locked: wrong or unset master password")
-    with open(_mesh_path(), "w", encoding="ascii") as fh:
-        fh.write(_seal(configs, passphrase))
+    _write_mesh(configs, passphrase)
 
 
 def unseal_mesh(passphrase: str) -> dict:
@@ -129,5 +135,5 @@ def build_and_seal_mesh(
     for name, endpoint in devices:
         mesh.add_device(name, endpoint=endpoint)
     configs = mesh.generate()
-    seal_mesh(configs, passphrase)
+    _write_mesh(configs, passphrase)  # already logged in above — skip the re-login KDF
     return list(configs.keys())

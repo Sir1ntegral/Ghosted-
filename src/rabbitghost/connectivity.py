@@ -73,6 +73,23 @@ def sovereign_get(url: str, *, timeout: float = 15.0) -> dict:
         return {"ok": False, "error": str(e), "spooled": True}
 
 
+def flush_fetch() -> dict:
+    """Replay spooled GETs (store-and-forward): re-attempt each queued URL through the
+    sovereign egress and drop only those that now succeed. No-ops when offline."""
+    sp = transport.Spool("fetch")
+
+    def _send(payload: dict) -> bool:
+        try:
+            from rabbit.core.sovereign_downloader import sovereign_http_get
+
+            r = sovereign_http_get(payload["url"], connect_timeout=15, read_timeout=15)
+            return bool(getattr(r, "success", False))
+        except Exception:
+            return False
+
+    return sp.flush(_send)
+
+
 def start_hotspot(ssid: str = "RabbitMesh", password: str = "rabbitmesh1234") -> dict:
     """Stand up a WiFi hotspot so peers join + the mesh runs over it (Windows netsh).
     Needs admin + a hosted-network-capable adapter; reports the outcome, never crashes.

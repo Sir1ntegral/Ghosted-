@@ -80,6 +80,26 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
             "store-and-forward outbox status",
             "Shows pending queued operations + online status. Queued ops auto-flush when a link returns.",
         ),
+        (
+            "flush",
+            "flush spooled mesh-mail + fetch now",
+            "Forces a store-and-forward pass: re-delivers spooled @sovereign.dmn mesh mail to "
+            "peers and replays spooled URL fetches. A background flusher also runs this whenever "
+            "connectivity returns, so it usually happens on its own.",
+        ),
+        (
+            "mesh [export [dir]]",
+            "mesh status, or export sealed configs",
+            "'mesh' reports whether a sealed WireGuard mesh exists; 'mesh export [dir]' unlocks the "
+            "vault with the master password and writes each device's importable .conf (Add Tunnel "
+            "from file in WireGuard) — the actuation step for a mesh built with 'network'.",
+        ),
+        (
+            "passwd",
+            "rotate the master password",
+            "Verifies the current password, sets a new one (min 12 chars), and re-seals the "
+            "WireGuard mesh under the new key in one step. Only an encrypted verifier is stored.",
+        ),
     ],
     "Mail": [
         (
@@ -122,6 +142,23 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
             "extract text/structure",
             "Parses pdf/docx/html/csv/json/txt; images go through RABBIT-OCR-1 when the OCR engine "
             "is installed (pip install .[ocr]).",
+        ),
+    ],
+    "Safety + diagnostics": [
+        (
+            "scan <path> [q]",
+            "EDR-lite file safety check",
+            "Dependency-free triage of a file: SHA-256, risky extension, executable/magic-byte "
+            "sniff, extension/content mismatch, and entropy (packed/encrypted). Verdict is "
+            "clean/suspicious/malicious; add 'q' to quarantine a malicious file (moved inert, "
+            "renamed). Consults the rabbit mind's EDR too when present.",
+        ),
+        (
+            "doctor",
+            "report which rabbit organs are wired",
+            "Checks every declared contract between RabbitGhost and the rabbit mind and reports "
+            "what is importable + exposes the expected surface — so you can see exactly which "
+            "capabilities are fully wired and which would degrade on this host.",
         ),
     ],
     "Session": [

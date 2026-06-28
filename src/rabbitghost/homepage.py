@@ -639,6 +639,12 @@ def serve(port: int = _PORT) -> None:
         _t.Thread(target=rabbit_search.warm, daemon=True).start()
     except Exception:
         pass
+    try:  # complete spooled mesh-mail / fetch the instant connectivity returns
+        from rabbitghost import flusher
+
+        flusher.start_autoflush()
+    except Exception:
+        pass
     cls = _classify(_all_local_ips())
     print(f"🐰 Rabbit home page live — reachable by IP on port {port}:")
     print(f"   local:     http://127.0.0.1:{port}")

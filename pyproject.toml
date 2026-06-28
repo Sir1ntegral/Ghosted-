@@ -15,7 +15,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ocr = ["rapidocr-onnxruntime", "numpy", "scipy", "Pillow"]
+# Image OCR backend (parse <image>). numpy/scipy moved out -> see [semantic].
+ocr = ["rapidocr-onnxruntime", "Pillow"]
+# Meaning-ranking of search results (homepage + browse). The rabbit semantic model
+# needs numpy/scipy; without this extra, ranking degrades to lexical + sentiment.
+semantic = ["numpy", "scipy"]
 build = ["pyinstaller"]
 dev = ["pytest"]
 
@@ -25,3 +29,8 @@ rabbitghost-home = "rabbitghost.homepage:serve"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# Ship the trained semantic model with `pip install .` (src-layout would drop it
+# otherwise — the audit's "model never ships" bug). PyInstaller bundles it via build.ps1.
+rabbitghost = ["data/*.json"]
