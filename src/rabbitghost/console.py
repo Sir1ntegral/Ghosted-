@@ -49,8 +49,18 @@ def _browser():
 
 def menu() -> None:
     print(BANNER)
-    g = _ghost()
-    print(g.enter())
+    g = None
+    try:
+        g = _ghost()
+        print(g.enter())
+    except (
+        Exception
+    ) as e:  # boot must reach the prompt even if the stealth stack can't load
+        print(
+            f"[ghost] stealth stack unavailable ({type(e).__name__}: {e}).\n"
+            "        Running with reduced commands — the rabbit mind isn't importable.\n"
+            "        Stdlib commands (connect/spool/contacts/filters/identity/parse) still work."
+        )
     actions = textwrap.dedent(
         """
         commands:
@@ -102,14 +112,16 @@ def handle_command(
     I/O is injectable (ask / getpw / out) so every command is unit-testable
     without a real terminal — this is the seam that makes the console SoC-clean."""
     if cmd == "quit":
-        out(g.exit())
+        out(g.exit() if g is not None else {"bye": True})
         return False
     elif cmd == "status":
-        out({"active": g.is_active})
+        out({"active": bool(g is not None and getattr(g, "is_active", False))})
     elif cmd == "help":
         from rabbitghost import help_text
 
         out(help_text.detail(rest) if rest.strip() else help_text.overview())
+    elif cmd in ("recon", "forge") and g is None:
+        out("ghost stealth stack unavailable (the rabbit mind isn't importable)")
     elif cmd == "recon":
         out(g.recon(rest))
     elif cmd == "forge":

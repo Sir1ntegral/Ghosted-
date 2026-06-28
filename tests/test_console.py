@@ -152,3 +152,24 @@ def test_mail_pull_bad_protocol():
 def test_mail_unknown_subcommand():
     _, out, _ = run("mail", "frobnicate")
     assert "unknown mail subcommand" in out[0]
+
+
+# ── Tier 1: boot robustness — commands tolerate a missing ghost stack (g=None) ─
+def test_commands_tolerate_missing_ghost():
+    out = []
+
+    def call(cmd, rest=""):
+        return handle_command(
+            cmd,
+            rest,
+            None,  # ghost stack unavailable
+            {"pw": None},
+            ask=lambda *_: "",
+            getpw=lambda *_: "",
+            out=out.append,
+        )
+
+    assert call("status") is True and out[-1] == {"active": False}
+    call("recon", "x")
+    assert "unavailable" in out[-1]
+    assert call("quit") is False  # quit still exits cleanly

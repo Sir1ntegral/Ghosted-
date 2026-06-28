@@ -621,7 +621,15 @@ class _Handler(BaseHTTPRequestHandler):
 def serve(port: int = _PORT) -> None:
     global _PORT
     _PORT = port
-    httpd = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
+    try:
+        httpd = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
+    except OSError as e:
+        print(
+            f"[homepage] cannot bind 0.0.0.0:{port} — {e}\n"
+            f"           the port is likely already in use; start on another port:\n"
+            f"           rabbitghost-home <port>   (or  python -m rabbitghost.homepage <port>)"
+        )
+        return
     # Pre-warm the dominance/intent engine in the background so the first search is fast.
     try:
         import threading as _t
@@ -644,4 +652,4 @@ def serve(port: int = _PORT) -> None:
 
 
 if __name__ == "__main__":
-    serve()
+    serve(int(sys.argv[1]) if len(sys.argv) > 1 else _PORT)
