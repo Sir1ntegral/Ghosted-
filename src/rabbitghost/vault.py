@@ -41,14 +41,14 @@ def _mesh_path() -> str:
 
 
 def _seal(obj: Any, passphrase: str) -> str:
-    from rabbit.core.crypto import encrypt
+    from rabbitghost.crypto import encrypt
 
     blob = encrypt(json.dumps(obj, ensure_ascii=False), passphrase)
     return base64.b64encode(blob.to_bytes()).decode()
 
 
 def _unseal(token: str, passphrase: str) -> Any:
-    from rabbit.core.crypto import EncryptedBlob, decrypt
+    from rabbitghost.crypto import EncryptedBlob, decrypt
 
     blob = EncryptedBlob.from_bytes(base64.b64decode(token))
     return json.loads(decrypt(blob, passphrase))

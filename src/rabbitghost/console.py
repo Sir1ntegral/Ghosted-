@@ -181,14 +181,14 @@ def handle_command(
     elif cmd == "encrypt":
         import base64
 
-        from rabbit.core.crypto import encrypt
+        from rabbitghost.crypto import encrypt
 
         blob = encrypt(rest, getpw("passphrase: ").strip())
         out({"sealed": base64.b64encode(blob.to_bytes()).decode()})
     elif cmd == "decrypt":
         import base64
 
-        from rabbit.core.crypto import EncryptedBlob, decrypt
+        from rabbitghost.crypto import EncryptedBlob, decrypt
 
         tok = ask("sealed token: ").strip()
         pw = getpw("passphrase: ").strip()
