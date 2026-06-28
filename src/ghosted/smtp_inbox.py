@@ -10,7 +10,7 @@ Hardened: bounded DATA buffering, per-line caps, socket timeout, bounded concurr
 fail-CLOSED on seal failure (451 retry, never a false ACK), and it refuses to start
 without an explicit key (no inbound mail sealed under a shared default).
 
-    RABBIT_INBOX_KEY=yourkey python -m rabbitghost.smtp_inbox 25
+    RABBIT_INBOX_KEY=yourkey python -m ghosted.smtp_inbox 25
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import socket
 import sys
 import threading
 
-from rabbitghost import mail
+from ghosted import mail
 
 _MAX_BYTES = int(
     os.environ.get("RABBIT_INBOX_MAX_BYTES", str(25 * 1024 * 1024))
@@ -43,7 +43,7 @@ def _handle(conn: socket.socket, key: str) -> None:
     f = conn.makefile("rb")
     mailfrom, rcpts = None, []
     try:
-        send("220 sovereign.dmn RabbitGhost ready")
+        send("220 sovereign.dmn Ghosted ready")
         while True:
             line = f.readline(_MAX_LINE + 1)
             if not line:

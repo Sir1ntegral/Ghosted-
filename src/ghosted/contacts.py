@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 
-from rabbitghost import mail
+from ghosted import mail
 
 
 def _path() -> str:

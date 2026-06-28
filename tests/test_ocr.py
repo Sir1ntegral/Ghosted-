@@ -14,7 +14,7 @@ pytest.importorskip(
 )
 PIL = pytest.importorskip("PIL")
 
-from rabbitghost import parser  # noqa: E402
+from ghosted import parser  # noqa: E402
 
 
 def test_ocr_extracts_text_from_image(tmp_path):

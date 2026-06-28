@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import help_text  # noqa: E402
+from ghosted import help_text  # noqa: E402
 
 
 def test_overview_and_detail():
@@ -44,7 +44,7 @@ def test_help_documents_every_console_command():
 
 
 def test_homepage_help_page_renders():
-    from rabbitghost import homepage as h
+    from ghosted import homepage as h
 
     page = h._help_page()
     assert "Rabbit" in page and "recon" in page and "stego" in page.lower()

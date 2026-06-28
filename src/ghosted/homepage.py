@@ -91,7 +91,7 @@ def _egress_ip() -> str:
         return _EGRESS_CACHE["ip"]
     val = "unknown (offline or fetch failed)"
     try:
-        from rabbitghost.http import sovereign_http_get
+        from ghosted.http import sovereign_http_get
 
         r = sovereign_http_get(
             "https://api.ipify.org", connect_timeout=5, read_timeout=5
@@ -107,7 +107,7 @@ def _egress_ip() -> str:
 
 def _search(query: str) -> list:
     try:
-        from rabbitghost.web import SovereignBrowserEngine
+        from ghosted.web import SovereignBrowserEngine
 
         results = SovereignBrowserEngine().web_search(query)
     except Exception as e:  # never let the page 500
@@ -115,7 +115,7 @@ def _search(query: str) -> list:
             type("E", (), {"title": "search error", "url": "", "snippet": str(e)})()
         ]
     try:  # semantic re-rank: meaning / context / sentiment (degrades, never breaks)
-        from rabbitghost import semantic_search as rabbit_search
+        from ghosted import semantic_search as rabbit_search
 
         return rabbit_search.rerank(query, results)
     except Exception:
@@ -147,7 +147,7 @@ def _gate():
         if _GATE_TRIED:
             return _GATE
         try:
-            from rabbitghost.gate import GojoBoundaryGate
+            from ghosted.gate import GojoBoundaryGate
 
             ap = _gojo_audit_path()
             _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()
@@ -463,7 +463,7 @@ def _is_authed(handler) -> bool:
 def _login_page(msg: str = "") -> str:
     initd = True
     try:
-        from rabbitghost import vault
+        from ghosted import vault
 
         initd = vault.is_initialized()
     except Exception:
@@ -490,7 +490,7 @@ def _login_page(msg: str = "") -> str:
 
 
 def _help_page() -> str:
-    from rabbitghost import help_text
+    from ghosted import help_text
 
     rows = []
     for cat, items in help_text.HELP.items():
@@ -581,7 +581,7 @@ class _Handler(BaseHTTPRequestHandler):
             pw = (parse_qs(body).get("pw") or [""])[0]
             ok = False
             try:
-                from rabbitghost import vault
+                from ghosted import vault
 
                 ok = vault.login(pw)
             except Exception:
@@ -627,20 +627,20 @@ def serve(port: int = _PORT) -> None:
         print(
             f"[homepage] cannot bind 0.0.0.0:{port} — {e}\n"
             f"           the port is likely already in use; start on another port:\n"
-            f"           rabbitghost-home <port>   (or  python -m rabbitghost.homepage <port>)"
+            f"           ghosted-home <port>   (or  python -m ghosted.homepage <port>)"
         )
         return
     # Pre-warm the dominance/intent engine in the background so the first search is fast.
     try:
         import threading as _t
 
-        from rabbitghost import semantic_search as rabbit_search
+        from ghosted import semantic_search as rabbit_search
 
         _t.Thread(target=rabbit_search.warm, daemon=True).start()
     except Exception:
         pass
     try:  # complete spooled mesh-mail / fetch the instant connectivity returns
-        from rabbitghost import flusher
+        from ghosted import flusher
 
         flusher.start_autoflush()
     except Exception:

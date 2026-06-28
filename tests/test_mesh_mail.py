@@ -22,7 +22,7 @@ def _free_port():
 
 def test_mesh_delivery_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mail, mesh_mail
+    from ghosted import mail, mesh_mail
 
     port = _free_port()
     threading.Thread(
@@ -44,7 +44,7 @@ def test_mesh_delivery_roundtrip(tmp_path, monkeypatch):
 
 def test_deliver_offline_spools(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mesh_mail, transport
+    from ghosted import mesh_mail, transport
 
     res = mesh_mail.deliver(
         "10.255.255.1", "opaque-token", port=9, ports=(9,)

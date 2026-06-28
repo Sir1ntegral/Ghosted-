@@ -36,13 +36,13 @@ BANNER = r"""
 
 
 def _ghost():
-    from rabbitghost.ghost import GhostMode
+    from ghosted.ghost import GhostMode
 
     return GhostMode()
 
 
 def _browser():
-    from rabbitghost.web import SovereignBrowserEngine
+    from ghosted.web import SovereignBrowserEngine
 
     return SovereignBrowserEngine()
 
@@ -62,7 +62,7 @@ def menu() -> None:
             "        Stdlib commands (connect/spool/contacts/filters/identity/parse) still work."
         )
     try:  # auto-complete spooled mesh-mail / fetch the instant connectivity returns
-        from rabbitghost import flusher
+        from ghosted import flusher
 
         flusher.start_autoflush()
     except Exception:
@@ -128,7 +128,7 @@ def handle_command(
     elif cmd == "status":
         out({"active": bool(g is not None and getattr(g, "is_active", False))})
     elif cmd == "help":
-        from rabbitghost import help_text
+        from ghosted import help_text
 
         out(help_text.detail(rest) if rest.strip() else help_text.overview())
     elif cmd in ("recon", "forge") and g is None:
@@ -140,7 +140,7 @@ def handle_command(
     elif cmd == "browse":
         out(_browser().web_search(rest))
     elif cmd == "login":
-        from rabbitghost import vault
+        from ghosted import vault
 
         pw = getpw("master password: ")
         if not vault.is_initialized():
@@ -157,7 +157,7 @@ def handle_command(
         else:
             out({"vault": "wrong password"})
     elif cmd == "network":
-        from rabbitghost import vault
+        from ghosted import vault
 
         if not session.get("pw"):
             out("locked — run 'login' first")
@@ -181,20 +181,20 @@ def handle_command(
     elif cmd == "encrypt":
         import base64
 
-        from rabbitghost.crypto import encrypt
+        from ghosted.crypto import encrypt
 
         blob = encrypt(rest, getpw("passphrase: ").strip())
         out({"sealed": base64.b64encode(blob.to_bytes()).decode()})
     elif cmd == "decrypt":
         import base64
 
-        from rabbitghost.crypto import EncryptedBlob, decrypt
+        from ghosted.crypto import EncryptedBlob, decrypt
 
         tok = ask("sealed token: ").strip()
         pw = getpw("passphrase: ").strip()
         out({"opened": decrypt(EncryptedBlob.from_bytes(base64.b64decode(tok)), pw)})
     elif cmd in ("cloak", "uncloak"):
-        from rabbitghost.ghost import GhostCloak
+        from ghosted.ghost import GhostCloak
 
         if cmd == "cloak":
             img, _, msg = rest.partition(" ")
@@ -206,16 +206,16 @@ def handle_command(
             pw = getpw("passphrase: ").strip() or None
             out({"hidden": GhostCloak(passphrase=pw).extract_payload(rest)})
     elif cmd == "spool":
-        from rabbitghost import transport
+        from ghosted import transport
 
         sp = transport.Spool()
         out({"pending": len(sp), "online": transport.online()})
     elif cmd == "flush":
-        from rabbitghost import flusher
+        from ghosted import flusher
 
         out(flusher.flush_all())
     elif cmd == "mesh":
-        from rabbitghost import vault
+        from ghosted import vault
 
         sub, _, arg = rest.partition(" ")
         sub = sub.strip().lower()
@@ -252,7 +252,7 @@ def handle_command(
         else:
             out(f"unknown mesh subcommand: {sub} (status|export [dir])")
     elif cmd == "passwd":
-        from rabbitghost import vault
+        from ghosted import vault
 
         if not vault.is_initialized():
             out("no master password set yet — run 'login' first")
@@ -274,7 +274,7 @@ def handle_command(
         else:
             out({"vault": "current password incorrect"})
     elif cmd == "identity":
-        from rabbitghost import mail
+        from ghosted import mail
 
         sub, _, arg = rest.partition(" ")
         if sub == "add":
@@ -290,23 +290,23 @@ def handle_command(
                 }
             )
     elif cmd == "connect":
-        from rabbitghost import connectivity
+        from ghosted import connectivity
 
         out(connectivity.ensure_online())
     elif cmd == "hotspot":
-        from rabbitghost import connectivity
+        from ghosted import connectivity
 
         out(connectivity.start_hotspot())
     elif cmd == "contacts":
-        from rabbitghost import contacts
+        from ghosted import contacts
 
         out({"contacts": contacts.contacts()})
     elif cmd == "filters":
-        from rabbitghost import mail_filters
+        from ghosted import mail_filters
 
         out({"filters": mail_filters.filters()})
     elif cmd == "mail":
-        from rabbitghost import bridge, imap_pull, mail, mesh_mail
+        from ghosted import bridge, imap_pull, mail, mesh_mail
 
         sub, _, arg = rest.partition(" ")
         sub = sub.strip().lower()
@@ -388,12 +388,12 @@ def handle_command(
         else:
             out(f"unknown mail subcommand: {sub} (inbox|read|compose|send|ext|pull)")
     elif cmd == "mailsearch":
-        from rabbitghost import mail
+        from ghosted import mail
 
         hits = mail.search(rest, getpw("passphrase: "))
         out({"hits": len(hits), "subjects": [h.get("subject") for h in hits[:10]]})
     elif cmd == "parse":
-        from rabbitghost import parser
+        from ghosted import parser
 
         res = parser.parse(rest, max_chars=2000)
         info = {
@@ -405,13 +405,13 @@ def handle_command(
             info["error"] = res["error"]
         out(info)
     elif cmd == "scan":
-        from rabbitghost import scan as _scan
+        from ghosted import scan as _scan
 
         target, _, opt = rest.partition(" ")
         quarantine = opt.strip().lower() in ("q", "-q", "quarantine")
         out(_scan.scan_file(target.strip(), quarantine=quarantine))
     elif cmd == "doctor":
-        from rabbitghost import contracts
+        from ghosted import contracts
 
         out(contracts.verify_contracts())
     else:

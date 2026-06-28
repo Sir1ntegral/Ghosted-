@@ -57,7 +57,7 @@ def _fetch(url: str, *, params: dict | None = None, timeout: int = 15) -> str:
         pass
     # Fallback: our own stdlib HTTP client.
     try:
-        from rabbitghost.http import sovereign_http_get
+        from ghosted.http import sovereign_http_get
 
         r = sovereign_http_get(full, connect_timeout=timeout, read_timeout=timeout)
         return r.body.decode("utf-8", "replace") if r.success else ""

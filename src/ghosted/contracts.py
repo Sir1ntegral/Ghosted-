@@ -9,7 +9,7 @@ optional dep that enriches it, and what degrades when that dep is absent.
 
 `verify_contracts()` probes the host and reports, per capability, whether its module
 is wired and whether its optional backing dep is installed — the single answer to
-"what can this install do right now, and what would `pip install rabbitghost[...]`
+"what can this install do right now, and what would `pip install ghosted[...]`
 unlock."
 """
 
@@ -21,7 +21,7 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class CryptoModule(Protocol):
-    """rabbitghost.crypto — RABBIT-CIPHER-1 seal/open used by vault + mail."""
+    """ghosted.crypto — RABBIT-CIPHER-1 seal/open used by vault + mail."""
 
     def encrypt(self, plaintext: str, passphrase: str) -> Any: ...
     def decrypt(self, blob: Any, passphrase: str) -> str: ...
@@ -29,7 +29,7 @@ class CryptoModule(Protocol):
 
 @runtime_checkable
 class WebModule(Protocol):
-    """rabbitghost.web — masked search/fetch (.web_search/.fetch_page)."""
+    """ghosted.web — masked search/fetch (.web_search/.fetch_page)."""
 
     def web_search(self, query: str, **kw: Any) -> Any: ...
 
@@ -38,27 +38,27 @@ class WebModule(Protocol):
 #   module is always one of Ghosted's own (so it imports); optional_dep, when set,
 #   names the pip extra that enriches the capability beyond its pure-Python floor.
 CONTRACTS: list[tuple[str, str, list[str], str, str | None, str]] = [
-    ("crypto", "rabbitghost.crypto", ["encrypt", "decrypt", "EncryptedBlob"],
+    ("crypto", "ghosted.crypto", ["encrypt", "decrypt", "EncryptedBlob"],
      "vault + black-box mail", None, "pure-Python — always available"),
-    ("wireguard", "rabbitghost.wireguard", ["PackMesh"],
+    ("wireguard", "ghosted.wireguard", ["PackMesh"],
      "WireGuard mesh (network/mesh)", None, "pure-Python — always available"),
-    ("http", "rabbitghost.http", ["sovereign_http_get"],
+    ("http", "ghosted.http", ["sovereign_http_get"],
      "sovereign egress (connect/fetch/egress-IP)", None, "stdlib urllib floor"),
-    ("gate", "rabbitghost.gate", ["GojoBoundaryGate"],
+    ("gate", "ghosted.gate", ["GojoBoundaryGate"],
      "homepage remote boundary (rate-limit + audit)", None, "pure-Python — always available"),
-    ("web", "rabbitghost.web", ["SovereignBrowserEngine"],
+    ("web", "ghosted.web", ["SovereignBrowserEngine"],
      "web search (browse/recon/homepage)", "curl_cffi",
      "without curl_cffi+bs4: stdlib fetch + regex parse"),
-    ("ghost", "rabbitghost.ghost", ["GhostMode", "GhostCloak"],
+    ("ghost", "ghosted.ghost", ["GhostMode", "GhostCloak"],
      "stealth recon/forge + stego cloak", "PIL",
      "cloak/uncloak needs Pillow; recon/forge are pure-Python"),
-    ("semantic", "rabbitghost.semantic_search", ["rerank"],
+    ("semantic", "ghosted.semantic_search", ["rerank"],
      "meaning-ranking of search results", "numpy",
      "without numpy + model: lexical + sentiment ranking"),
-    ("ocr", "rabbitghost.ocr", ["OCR"],
+    ("ocr", "ghosted.ocr", ["OCR"],
      "image OCR in parse", "rapidocr_onnxruntime",
      "without an OCR backend: image text is empty"),
-    ("docparse", "rabbitghost.docparse", ["Maw"],
+    ("docparse", "ghosted.docparse", ["Maw"],
      "document extraction in parse", "pypdf",
      "without pypdf/python-docx: pdf/docx degrade; stdlib formats fine"),
 ]

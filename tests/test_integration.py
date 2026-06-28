@@ -43,8 +43,8 @@ def _post(path, data, headers=None):
 def _server(tmp_path_factory):
     base = tmp_path_factory.mktemp("appdata")
     os.environ["LOCALAPPDATA"] = str(base)
-    from rabbitghost import homepage as h
-    from rabbitghost import vault
+    from ghosted import homepage as h
+    from ghosted import vault
 
     vault.initialize("IntegrationPass123")
     threading.Thread(target=h.serve, kwargs={"port": _PORT}, daemon=True).start()
@@ -53,11 +53,11 @@ def _server(tmp_path_factory):
 
 
 def test_boot_all_modules_import():
-    import rabbitghost.console  # noqa: F401
-    import rabbitghost.homepage  # noqa: F401
-    import rabbitghost.mail  # noqa: F401
-    import rabbitghost.semantic_search  # noqa: F401
-    import rabbitghost.vault  # noqa: F401
+    import ghosted.console  # noqa: F401
+    import ghosted.homepage  # noqa: F401
+    import ghosted.mail  # noqa: F401
+    import ghosted.semantic_search  # noqa: F401
+    import ghosted.vault  # noqa: F401
 
 
 def test_home_route_and_security_headers():
@@ -77,7 +77,7 @@ def test_search_route_returns_results():
 
 
 def test_xss_guard_on_dangerous_href(monkeypatch):
-    from rabbitghost import homepage as h
+    from ghosted import homepage as h
 
     def fake_search(_q):
         return [
@@ -111,7 +111,7 @@ def test_login_body_cap():
 
 
 def test_gate_logic_local_remote_expiry():
-    from rabbitghost import homepage as h
+    from ghosted import homepage as h
 
     class H:
         def __init__(self, ip, cookie=""):

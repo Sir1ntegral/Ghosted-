@@ -1,10 +1,10 @@
 """
-EDR-lite — a standalone file-safety scanner for RabbitGhost (no YARA, no cloud, no deps).
+EDR-lite — Ghosted's standalone file-safety scanner (no YARA, no cloud, no deps).
 
-The README advertises that fetched files are scanned; that scanning lives in the rabbit
-mind. Run standalone, this module is RabbitGhost's own lightweight analogue: dependency-
-free heuristics over a file, an optional consult of the rabbit EDR when present, and an
-inert quarantine for anything that trips the bar. It is a triage aid, not a full AV.
+The README advertises that fetched files are scanned; this is that scanner. It is
+Ghosted's own lightweight analogue: dependency-free heuristics over a file
+(extension/entropy/denylist/PE-detection) and an inert quarantine for anything that
+trips the bar. It is a triage aid, not a full AV.
 """
 
 from __future__ import annotations
