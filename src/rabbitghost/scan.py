@@ -125,14 +125,9 @@ def scan_file(
 
     verdict = "malicious" if score >= 60 else ("suspicious" if score >= 30 else "clean")
 
-    # Defense in depth: consult the rabbit mind's EDR if this host has it.
+    # Standalone tool: Ghosted's own heuristic scan above is the verdict. (The
+    # optional rabbit-EDR defense-in-depth consult was dropped in the decouple.)
     rabbit_edr = None
-    try:
-        from rabbit.security.edr import scan_path as _rabbit_scan  # type: ignore
-
-        rabbit_edr = _rabbit_scan(path)
-    except Exception:
-        rabbit_edr = None
 
     report = {
         "path": path,

@@ -91,7 +91,7 @@ def _egress_ip() -> str:
         return _EGRESS_CACHE["ip"]
     val = "unknown (offline or fetch failed)"
     try:
-        from rabbit.core.sovereign_downloader import sovereign_http_get
+        from rabbitghost.http import sovereign_http_get
 
         r = sovereign_http_get(
             "https://api.ipify.org", connect_timeout=5, read_timeout=5
@@ -107,7 +107,7 @@ def _egress_ip() -> str:
 
 def _search(query: str) -> list:
     try:
-        from rabbit.research.sovereign_browser_engine import SovereignBrowserEngine
+        from rabbitghost.web import SovereignBrowserEngine
 
         results = SovereignBrowserEngine().web_search(query)
     except Exception as e:  # never let the page 500
@@ -147,7 +147,7 @@ def _gate():
         if _GATE_TRIED:
             return _GATE
         try:
-            from rabbit.security.boundary.gojo_boundary import GojoBoundaryGate
+            from rabbitghost.gate import GojoBoundaryGate
 
             ap = _gojo_audit_path()
             _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()

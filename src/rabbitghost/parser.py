@@ -81,16 +81,16 @@ def parse_text(text: str) -> dict:
 
 def _ocr(path: str) -> dict:
     try:
-        from rabbit.perception.sovereign_ocr import SovereignOCR
+        from rabbitghost.ocr import OCR
 
-        res = SovereignOCR().extract(path)
+        res = OCR().extract(path)
         txt = getattr(res, "text", None)
         if txt is None:
             txt = res if isinstance(res, str) else ""
         return {
             "type": "image",
             "text": txt or "",
-            "backend": "RABBIT-OCR-1",
+            "backend": "ghosted-ocr",
             "path": path,
         }
     except Exception as e:  # noqa: BLE001
@@ -111,13 +111,13 @@ def parse_file(path: str, *, max_chars: int | None = None) -> dict:
         return _ocr(path)
     # Prefer Rabbit's Maw (robust: pdf/docx/html/csv/json/txt/md)
     try:
-        from rabbit.maw.maw import Maw
+        from rabbitghost.docparse import Maw
 
         txt = Maw().ingest(path, max_chars=max_chars)
         return {
             "type": ext.lstrip(".") or "text",
             "text": txt or "",
-            "source": "maw",
+            "source": "docparse",
             "path": path,
         }
     except Exception:

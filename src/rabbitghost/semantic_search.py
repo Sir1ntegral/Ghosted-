@@ -98,7 +98,7 @@ def _semantic_model():
     try:
         import os
 
-        from rabbit.core.sovereign_semantic import SovereignSemanticModel
+        from rabbitghost._sovereign_semantic import SovereignSemanticModel
 
         path = os.path.join(os.path.dirname(__file__), "data", "semantic_model.json")
         m = SovereignSemanticModel.load(path)
@@ -112,18 +112,13 @@ _DOM_ENGINE = None
 
 
 def _dominance_engine():
-    """Rabbit's Faculty Dominance Engine — reads which DOMAIN governs a text.
-    Used to tighten the app's understood INTENT of a search query."""
-    global _DOM_ENGINE
-    if _DOM_ENGINE is not None:
-        return _DOM_ENGINE or None
-    try:
-        from rabbit.council.dominance import FacultyDominanceEngine
+    """Intent-domain detection.
 
-        _DOM_ENGINE = FacultyDominanceEngine()
-    except Exception:
-        _DOM_ENGINE = False  # tried, unavailable
-    return _DOM_ENGINE or None
+    This was Rabbit's council FacultyDominanceEngine — a faculty of the greater
+    being. A standalone tool does not summon the council, so it is dropped in the
+    decouple. rerank() degrades cleanly without it (lexical + meaning-vector +
+    sentiment carry the ranking; intent-domain was only a minor tie-breaker)."""
+    return None
 
 
 def _intent_domain(text: str):

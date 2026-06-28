@@ -131,14 +131,14 @@ def _mailbox_dir() -> str:
 
 def _seal(obj: dict, passphrase: str) -> str:
     """Serialise + RABBIT-CIPHER-1 encrypt → opaque base64 token (the black box)."""
-    from rabbit.core.crypto import encrypt
+    from rabbitghost.crypto import encrypt
 
     blob = encrypt(json.dumps(obj, ensure_ascii=False), passphrase)
     return base64.b64encode(blob.to_bytes()).decode()
 
 
 def _open(token: str, passphrase: str) -> dict:
-    from rabbit.core.crypto import EncryptedBlob, decrypt
+    from rabbitghost.crypto import EncryptedBlob, decrypt
 
     blob = EncryptedBlob.from_bytes(base64.b64decode(token))
     return json.loads(decrypt(blob, passphrase))

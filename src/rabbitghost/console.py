@@ -36,13 +36,13 @@ BANNER = r"""
 
 
 def _ghost():
-    from rabbit.security.ghost.ghost_mode import GhostMode
+    from rabbitghost.ghost import GhostMode
 
     return GhostMode()
 
 
 def _browser():
-    from rabbit.research.sovereign_browser_engine import SovereignBrowserEngine
+    from rabbitghost.web import SovereignBrowserEngine
 
     return SovereignBrowserEngine()
 
@@ -81,7 +81,7 @@ def menu() -> None:
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
           scan <path> [q]   EDR-lite file safety check (q = quarantine if malicious)
-          doctor            report which rabbit organs/contracts are wired
+          doctor            report which capabilities are wired (+ optional deps)
           connect           check internet across wifi/LAN/WAN (multi-interface)
           hotspot           start a WiFi hotspot for the mesh (Windows, needs admin)
           contacts          list saved contacts
@@ -181,20 +181,20 @@ def handle_command(
     elif cmd == "encrypt":
         import base64
 
-        from rabbit.core.crypto import encrypt
+        from rabbitghost.crypto import encrypt
 
         blob = encrypt(rest, getpw("passphrase: ").strip())
         out({"sealed": base64.b64encode(blob.to_bytes()).decode()})
     elif cmd == "decrypt":
         import base64
 
-        from rabbit.core.crypto import EncryptedBlob, decrypt
+        from rabbitghost.crypto import EncryptedBlob, decrypt
 
         tok = ask("sealed token: ").strip()
         pw = getpw("passphrase: ").strip()
         out({"opened": decrypt(EncryptedBlob.from_bytes(base64.b64decode(tok)), pw)})
     elif cmd in ("cloak", "uncloak"):
-        from rabbit.security.ghost.ghost_cloak import GhostCloak
+        from rabbitghost.ghost import GhostCloak
 
         if cmd == "cloak":
             img, _, msg = rest.partition(" ")

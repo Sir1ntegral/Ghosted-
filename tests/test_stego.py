@@ -1,4 +1,4 @@
-"""Stego black-box round-trip (GhostCloak). Needs the rabbit mind + PIL; skips if absent."""
+"""Stego black-box round-trip (Ghosted's own GhostCloak). Needs PIL; skips if absent."""
 
 import os
 import sys
@@ -6,15 +6,13 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-pytest.importorskip(
-    "rabbit.security.ghost.ghost_cloak", reason="requires the rabbit mind"
-)
 pytest.importorskip("PIL")
 
 
 def test_stego_blackbox_roundtrip(tmp_path):
     from PIL import Image
-    from rabbit.security.ghost.ghost_cloak import GhostCloak
+
+    from rabbitghost.ghost import GhostCloak
 
     carrier = str(tmp_path / "carrier.png")
     out = str(tmp_path / "out.png")

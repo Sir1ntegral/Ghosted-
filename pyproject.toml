@@ -5,20 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rabbitghost"
 version = "0.1.0"
-description = "Sovereign stealth console + Google-like homepage + semantic search, built on the Rabbit mind."
+description = "Sovereign stealth console + Google-like homepage + semantic search — a standalone tool."
 readme = "README.md"
 requires-python = ">=3.11"
-# Runtime dependency: the `rabbit` package (the mind) must be importable — see README.
-# The browsing/handshake path uses curl_cffi; OCR (optional) uses rapidocr-onnxruntime.
+# Self-contained: NO dependency on the `rabbit` package. Base deps power the core
+# faces — masked web search/fetch (curl_cffi + beautifulsoup4) and image stego (Pillow).
+# Each base dep also degrades gracefully (curl_cffi->urllib, bs4->regex).
 dependencies = [
     "curl_cffi",
+    "beautifulsoup4",
+    "Pillow",
 ]
 
 [project.optional-dependencies]
-# Image OCR backend (parse <image>). numpy/scipy moved out -> see [semantic].
-ocr = ["rapidocr-onnxruntime", "Pillow"]
-# Meaning-ranking of search results (homepage + browse). The rabbit semantic model
-# needs numpy/scipy; without this extra, ranking degrades to lexical + sentiment.
+# Image OCR backend (parse <image>).
+ocr = ["rapidocr-onnxruntime"]
+# Rich document extraction (parse <pdf|docx>). Without it, those formats degrade.
+docs = ["pypdf", "python-docx"]
+# Meaning-ranking of search results (homepage + browse). Without it, ranking
+# degrades to lexical + sentiment.
 semantic = ["numpy", "scipy"]
 build = ["pyinstaller"]
 dev = ["pytest"]

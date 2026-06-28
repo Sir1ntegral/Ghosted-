@@ -231,8 +231,8 @@ def test_passwd_rotates(tmp_path, monkeypatch):
 def test_doctor_reports_contracts():
     _, out, _ = run("doctor")
     rep = out[0]
-    assert rep["total"] >= 11 and "organs" in rep
-    assert rep["organs"]["crypto"]["ok"] is True  # rabbit mind present in test env
+    assert rep["total"] >= 9 and "organs" in rep
+    assert rep["organs"]["crypto"]["ok"] is True  # crypto is pure-Python, always wired
 
 
 def test_scan_clean_text(tmp_path):
