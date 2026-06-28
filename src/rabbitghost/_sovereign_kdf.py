@@ -295,19 +295,14 @@ def _hkdf_expand(prk: bytes, info: bytes, length: int) -> bytes:
 def _machine_key() -> bytes:
     """Derive a 32-byte machine-specific binding key.
 
-    Attempts to use Rabbit's HardwareID fingerprint first; falls back to
-    platform identifiers.  Never raises — degraded binding is still binding.
+    Uses platform identifiers (node + machine + processor). Never raises —
+    degraded binding is still binding. (Off the vault crypto path: only the
+    optional machine_bind=True derive() option calls this, which Ghosted's
+    crypto never uses — so this is not byte-compat-critical.)
     """
-    try:
-        from rabbit.security.foundation.hardware_id import HardwareID
+    import platform
 
-        fp = HardwareID.fingerprint().encode("utf-8")
-    except Exception:
-        import platform
-
-        fp = (platform.node() + platform.machine() + platform.processor()).encode(
-            "utf-8"
-        )
+    fp = (platform.node() + platform.machine() + platform.processor()).encode("utf-8")
     return hashlib.sha3_256(b"rabbit:machine-bind:v1:" + fp).digest()
 
 

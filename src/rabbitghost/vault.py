@@ -129,7 +129,7 @@ def build_and_seal_mesh(
     and seal every config at rest behind the master password. Returns device names."""
     if not login(passphrase):
         raise PermissionError("vault locked: log in first")
-    from rabbit.network.sovereign_wireguard import PackMesh
+    from rabbitghost.wireguard import PackMesh
 
     mesh = PackMesh(hub=hub)
     for name, endpoint in devices:
