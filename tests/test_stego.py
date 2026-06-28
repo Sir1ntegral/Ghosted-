@@ -1,11 +1,14 @@
 """Stego black-box round-trip (GhostCloak). Needs the rabbit mind + PIL; skips if absent."""
+
 import os
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-pytest.importorskip("rabbit.security.ghost.ghost_cloak", reason="requires the rabbit mind")
+pytest.importorskip(
+    "rabbit.security.ghost.ghost_cloak", reason="requires the rabbit mind"
+)
 pytest.importorskip("PIL")
 
 
@@ -20,11 +23,11 @@ def test_stego_blackbox_roundtrip(tmp_path):
 
     GhostCloak(passphrase="hunter2pass").cloak_payload(carrier, secret, out)
     raw = open(out, "rb").read()
-    assert raw[:8] == b"\x89PNG\r\n\x1a\n"          # a real PNG
-    assert secret not in raw                         # encrypted + embedded (black box)
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n"  # a real PNG
+    assert secret not in raw  # encrypted + embedded (black box)
 
     recovered = GhostCloak(passphrase="hunter2pass").extract_payload(out)
-    assert recovered == secret                       # round-trips with the key
+    assert recovered == secret  # round-trips with the key
 
-    with pytest.raises(Exception):                   # wrong key cannot extract
+    with pytest.raises(Exception):  # wrong key cannot extract
         GhostCloak(passphrase="wrong-pass").extract_payload(out)

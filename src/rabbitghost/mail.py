@@ -12,6 +12,7 @@ verification mail) requires a domain + MX + reachable SMTP receiver — see READ
 task #16. Inbound external mail is plaintext in transit (sender-controlled) but is
 black-boxed AT REST the instant it lands via `seal_inbound()`.
 """
+
 from __future__ import annotations
 
 import base64
@@ -143,18 +144,28 @@ def _open(token: str, passphrase: str) -> dict:
     return json.loads(decrypt(blob, passphrase))
 
 
-def compose(to: str, subject: str, body: str, passphrase: str, sender: str = "me") -> str:
+def compose(
+    to: str, subject: str, body: str, passphrase: str, sender: str = "me"
+) -> str:
     """Return a sealed black-box token for one message (nothing is stored)."""
-    msg = {"to": address(to), "from": address(sender), "subject": subject,
-           "body": body, "t": int(time.time())}
+    msg = {
+        "to": address(to),
+        "from": address(sender),
+        "subject": subject,
+        "body": body,
+        "t": int(time.time()),
+    }
     return _seal(msg, passphrase)
 
 
 def send(to: str, subject: str, body: str, passphrase: str, sender: str = "me") -> str:
     """Seal + drop the message into the local mailbox as a `.box` file. Returns its path.
-    (Mesh delivery to a peer's mailbox is the same token over WireGuard — same black box.)"""
+    (Mesh delivery to a peer's mailbox is the same token over WireGuard — same black box.)
+    """
     token = compose(to, subject, body, passphrase, sender)
-    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box")
+    path = os.path.join(
+        _mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box"
+    )
     with open(path, "w", encoding="ascii") as fh:
         fh.write(token)
     return path
@@ -163,8 +174,16 @@ def send(to: str, subject: str, body: str, passphrase: str, sender: str = "me") 
 def seal_inbound(raw_rfc822: str, passphrase: str) -> str:
     """Layer-B hook: black-box an externally-received (plaintext) email AT REST the
     moment it lands, so it never sits on disk readable."""
-    msg = {"to": "me", "from": "external", "subject": "(external)", "body": raw_rfc822, "t": int(time.time())}
-    path = os.path.join(_mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box")
+    msg = {
+        "to": "me",
+        "from": "external",
+        "subject": "(external)",
+        "body": raw_rfc822,
+        "t": int(time.time()),
+    }
+    path = os.path.join(
+        _mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box"
+    )
     with open(path, "w", encoding="ascii") as fh:
         fh.write(_seal(msg, passphrase))
     return path
@@ -195,7 +214,9 @@ def search(query: str, passphrase: str, *, limit: int = 500) -> list[dict]:
             m = read(path, passphrase)
         except Exception:
             continue  # wrong key / corrupt — can't search what we can't open
-        hay = " ".join(str(m.get(k, "")) for k in ("from", "to", "subject", "body")).lower()
+        hay = " ".join(
+            str(m.get(k, "")) for k in ("from", "to", "subject", "body")
+        ).lower()
         if not q or q in hay:
             hits.append({**m, "_path": path})
     return hits

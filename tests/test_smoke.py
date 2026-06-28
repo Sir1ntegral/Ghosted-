@@ -1,4 +1,5 @@
 """Smoke tests — import + the pure-Python ranker (no network, no rabbit mind needed)."""
+
 import os
 import sys
 
@@ -23,8 +24,10 @@ def test_meaning_vectors_rank_by_meaning():
 
     ranked = ss.rerank(
         "security threat defense",
-        [R("banana bread recipe", "cooking dessert sugar"),
-         R("network security threats", "firewall intrusion attack defense")],
+        [
+            R("banana bread recipe", "cooking dessert sugar"),
+            R("network security threats", "firewall intrusion attack defense"),
+        ],
     )
     assert ranked[0].title == "network security threats"
     assert ranked[0]._rabbit_semantic > 0  # meaning-vectors contributed
@@ -38,10 +41,13 @@ def test_semantic_search_imports_and_ranks():
 
     results = [
         R("soup recipe", "cooking pasta"),
-        R("secure private browser", "trusted sovereign secure encrypted tor privacy browser"),
+        R(
+            "secure private browser",
+            "trusted sovereign secure encrypted tor privacy browser",
+        ),
     ]
     ranked = ss.rerank("secure private browser", results)
-    assert ranked[0].title == "secure private browser"      # relevant floats up
+    assert ranked[0].title == "secure private browser"  # relevant floats up
     assert hasattr(ranked[0], "_rabbit_score")
     assert hasattr(ranked[0], "_rabbit_sentiment")
 
@@ -50,7 +56,7 @@ def test_ranker_never_raises_on_bad_input():
     from rabbitghost import semantic_search as ss
 
     assert ss.rerank("", []) == []
-    assert len(ss.rerank("x", [type("B", (), {})()])) == 1   # missing attrs → safe
+    assert len(ss.rerank("x", [type("B", (), {})()])) == 1  # missing attrs → safe
 
 
 def test_sentiment_lexicon():

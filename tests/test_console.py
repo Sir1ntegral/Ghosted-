@@ -1,14 +1,17 @@
 """Console command tests — handle_command's I/O is injectable, so every branch
 is testable without a terminal."""
+
 import os
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-pytest.importorskip("rabbit.core.crypto", reason="requires the rabbit mind on PYTHONPATH")
+pytest.importorskip(
+    "rabbit.core.crypto", reason="requires the rabbit mind on PYTHONPATH"
+)
 
-from rabbitghost.console import handle_command
+from rabbitghost.console import handle_command  # noqa: E402
 
 
 class FakeGhost:
@@ -30,7 +33,10 @@ def run(cmd, rest="", session=None, asks=None, pws=None):
     pi = iter(pws or [])
     session = {"pw": None} if session is None else session
     cont = handle_command(
-        cmd, rest, FakeGhost(), session,
+        cmd,
+        rest,
+        FakeGhost(),
+        session,
         ask=lambda *_: next(ai, ""),
         getpw=lambda *_: next(pi, ""),
         out=out.append,
@@ -94,7 +100,8 @@ def test_network_builds_sealed_mesh(tmp_path, monkeypatch):
 
     vault.initialize("MeshMasterKey1")
     _, out, _ = run(
-        "network", session={"pw": "MeshMasterKey1"},
+        "network",
+        session={"pw": "MeshMasterKey1"},
         asks=["", "tower", "1.2.3.4:51820", "iphone", "", ""],  # ≥2 devices
     )
     assert {"tower", "iphone"} <= set(out[-1]["mesh_sealed_in_vault"])

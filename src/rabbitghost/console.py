@@ -36,11 +36,13 @@ BANNER = r"""
 
 def _ghost():
     from rabbit.security.ghost.ghost_mode import GhostMode
+
     return GhostMode()
 
 
 def _browser():
     from rabbit.research.sovereign_browser_engine import SovereignBrowserEngine
+
     return SovereignBrowserEngine()
 
 
@@ -90,7 +92,9 @@ def menu() -> None:
             print(f"[error] {type(e).__name__}: {e}")
 
 
-def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, out=print) -> bool:
+def handle_command(
+    cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, out=print
+) -> bool:
     """Execute one console command. Returns False to quit, True to continue.
 
     I/O is injectable (ask / getpw / out) so every command is unit-testable
@@ -102,6 +106,7 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         out({"active": g.is_active})
     elif cmd == "help":
         from rabbitghost import help_text
+
         out(help_text.detail(rest) if rest.strip() else help_text.overview())
     elif cmd == "recon":
         out(g.recon(rest))
@@ -111,6 +116,7 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
         out(_browser().web_search(rest))
     elif cmd == "login":
         from rabbitghost import vault
+
         pw = getpw("master password: ")
         if not vault.is_initialized():
             confirm = getpw("set new master password (confirm): ")
@@ -127,6 +133,7 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
             out({"vault": "wrong password"})
     elif cmd == "network":
         from rabbitghost import vault
+
         if not session.get("pw"):
             out("locked — run 'login' first")
             return True
@@ -139,20 +146,31 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
                 break
             ep = ask(f"  {nm} public endpoint host:port (blank if NAT): ").strip()
             devices.append((nm, ep))
-        out({"mesh_sealed_in_vault": vault.build_and_seal_mesh(devices, session["pw"], hub=hub or "")})
+        out(
+            {
+                "mesh_sealed_in_vault": vault.build_and_seal_mesh(
+                    devices, session["pw"], hub=hub or ""
+                )
+            }
+        )
     elif cmd == "encrypt":
         import base64
+
         from rabbit.core.crypto import encrypt
+
         blob = encrypt(rest, getpw("passphrase: ").strip())
         out({"sealed": base64.b64encode(blob.to_bytes()).decode()})
     elif cmd == "decrypt":
         import base64
+
         from rabbit.core.crypto import EncryptedBlob, decrypt
+
         tok = ask("sealed token: ").strip()
         pw = getpw("passphrase: ").strip()
         out({"opened": decrypt(EncryptedBlob.from_bytes(base64.b64decode(tok)), pw)})
     elif cmd in ("cloak", "uncloak"):
         from rabbit.security.ghost.ghost_cloak import GhostCloak
+
         if cmd == "cloak":
             img, _, msg = rest.partition(" ")
             pw = getpw("passphrase: ").strip() or None
@@ -164,39 +182,55 @@ def handle_command(cmd, rest, g, session, *, ask=input, getpw=getpass.getpass, o
             out({"hidden": GhostCloak(passphrase=pw).extract_payload(rest)})
     elif cmd == "spool":
         from rabbitghost import transport
+
         sp = transport.Spool()
         out({"pending": len(sp), "online": transport.online()})
     elif cmd == "identity":
         from rabbitghost import mail
+
         sub, _, arg = rest.partition(" ")
         if sub == "add":
             out({"added": mail.add_identity(arg)})
         elif sub == "rm":
             out({"removed": mail.remove_identity(arg)})
         else:
-            out({"suggested": mail.address("me"), "identities": mail.identities(),
-                 "note": "no IMAP / no POP — identities only; @sovereign.dmn suggested first"})
+            out(
+                {
+                    "suggested": mail.address("me"),
+                    "identities": mail.identities(),
+                    "note": "no IMAP / no POP — identities only; @sovereign.dmn suggested first",
+                }
+            )
     elif cmd == "connect":
         from rabbitghost import connectivity
+
         out(connectivity.ensure_online())
     elif cmd == "hotspot":
         from rabbitghost import connectivity
+
         out(connectivity.start_hotspot())
     elif cmd == "contacts":
         from rabbitghost import contacts
+
         out({"contacts": contacts.contacts()})
     elif cmd == "filters":
         from rabbitghost import mail_filters
+
         out({"filters": mail_filters.filters()})
     elif cmd == "mailsearch":
         from rabbitghost import mail
+
         hits = mail.search(rest, getpw("passphrase: "))
         out({"hits": len(hits), "subjects": [h.get("subject") for h in hits[:10]]})
     elif cmd == "parse":
         from rabbitghost import parser
+
         res = parser.parse(rest, max_chars=2000)
-        info = {"type": res.get("type"), "chars": len(res.get("text") or ""),
-                "preview": (res.get("text") or "")[:160]}
+        info = {
+            "type": res.get("type"),
+            "chars": len(res.get("text") or ""),
+            "preview": (res.get("text") or "")[:160],
+        }
         if "error" in res:
             info["error"] = res["error"]
         out(info)

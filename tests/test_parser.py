@@ -1,10 +1,11 @@
 """Parser tests — pure-stdlib paths run without the rabbit mind (it degrades)."""
+
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import parser
+from rabbitghost import parser  # noqa: E402
 
 
 def test_parse_text_json():
@@ -14,7 +15,9 @@ def test_parse_text_json():
 
 def test_parse_text_csv():
     r = parser.parse_text("a,b,c\n1,2,3\n4,5,6")
-    assert r["type"] == "csv" and len(r["rows"]) == 3 and r["rows"][1] == ["1", "2", "3"]
+    assert (
+        r["type"] == "csv" and len(r["rows"]) == 3 and r["rows"][1] == ["1", "2", "3"]
+    )
 
 
 def test_parse_text_html():

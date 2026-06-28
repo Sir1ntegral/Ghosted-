@@ -4,6 +4,7 @@ Exercises the homepage routes, the login flow, the XSS guard, the security
 headers, the gate logic, and that every module imports (boot). Needs the rabbit
 mind on PYTHONPATH; skips cleanly if absent.
 """
+
 import http.client
 import os
 import sys
@@ -13,7 +14,9 @@ import time
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-pytest.importorskip("rabbit.core.crypto", reason="requires the rabbit mind on PYTHONPATH")
+pytest.importorskip(
+    "rabbit.core.crypto", reason="requires the rabbit mind on PYTHONPATH"
+)
 
 _PORT = 7690
 
@@ -40,7 +43,8 @@ def _post(path, data, headers=None):
 def _server(tmp_path_factory):
     base = tmp_path_factory.mktemp("appdata")
     os.environ["LOCALAPPDATA"] = str(base)
-    from rabbitghost import homepage as h, vault
+    from rabbitghost import homepage as h
+    from rabbitghost import vault
 
     vault.initialize("IntegrationPass123")
     threading.Thread(target=h.serve, kwargs={"port": _PORT}, daemon=True).start()
@@ -76,7 +80,11 @@ def test_xss_guard_on_dangerous_href(monkeypatch):
     from rabbitghost import homepage as h
 
     def fake_search(_q):
-        return [type("R", (), {"title": "evil", "url": "javascript:alert(1)", "snippet": "x"})()]
+        return [
+            type(
+                "R", (), {"title": "evil", "url": "javascript:alert(1)", "snippet": "x"}
+            )()
+        ]
 
     monkeypatch.setattr(h, "_search", fake_search)
     _, body = _get("/search?q=evil")
@@ -110,12 +118,12 @@ def test_gate_logic_local_remote_expiry():
             self.client_address = (ip, 1)
             self.headers = {"Cookie": cookie}
 
-    assert h._is_authed(H("127.0.0.1"))                  # local open
-    assert not h._is_authed(H("10.44.0.9"))              # remote, no session
+    assert h._is_authed(H("127.0.0.1"))  # local open
+    assert not h._is_authed(H("10.44.0.9"))  # remote, no session
     h._SESSIONS["live"] = time.time() + 999
     h._SESSIONS["dead"] = time.time() - 1
     assert h._is_authed(H("10.44.0.9", "rg_session=live"))
-    assert not h._is_authed(H("10.44.0.9", "rg_session=dead"))   # expired evicted
+    assert not h._is_authed(H("10.44.0.9", "rg_session=dead"))  # expired evicted
 
 
 def test_404():

@@ -11,6 +11,7 @@ Strategy (no duplication, graceful):
 Every entry point returns a dict: {"type", "text", ... , optional "data"/"rows"}.
 Never raises — failures return {"type": "error", ...}.
 """
+
 from __future__ import annotations
 
 import csv
@@ -57,13 +58,21 @@ def parse_text(text: str) -> dict:
             pass
     # HTML
     low = t[:256].lower()
-    if "<!doctype html" in low or "<html" in low or ("</" in t and "<" in t and ">" in t):
+    if (
+        "<!doctype html" in low
+        or "<html" in low
+        or ("</" in t and "<" in t and ">" in t)
+    ):
         return {"type": "html", "text": _html_to_text(t)}
     # CSV (uniform multi-column rows)
     if "," in t and "\n" in t:
         try:
             rows = list(csv.reader(io.StringIO(t)))
-            if len(rows) > 1 and len(rows[0]) > 1 and all(len(r) == len(rows[0]) for r in rows[:5]):
+            if (
+                len(rows) > 1
+                and len(rows[0]) > 1
+                and all(len(r) == len(rows[0]) for r in rows[:5])
+            ):
                 return {"type": "csv", "rows": rows, "text": text}
         except Exception:
             pass
@@ -78,9 +87,19 @@ def _ocr(path: str) -> dict:
         txt = getattr(res, "text", None)
         if txt is None:
             txt = res if isinstance(res, str) else ""
-        return {"type": "image", "text": txt or "", "backend": "RABBIT-OCR-1", "path": path}
+        return {
+            "type": "image",
+            "text": txt or "",
+            "backend": "RABBIT-OCR-1",
+            "path": path,
+        }
     except Exception as e:  # noqa: BLE001
-        return {"type": "image", "text": "", "error": f"OCR unavailable: {e}", "path": path}
+        return {
+            "type": "image",
+            "text": "",
+            "error": f"OCR unavailable: {e}",
+            "path": path,
+        }
 
 
 def parse_file(path: str, *, max_chars: int | None = None) -> dict:
@@ -95,7 +114,12 @@ def parse_file(path: str, *, max_chars: int | None = None) -> dict:
         from rabbit.maw.maw import Maw
 
         txt = Maw().ingest(path, max_chars=max_chars)
-        return {"type": ext.lstrip(".") or "text", "text": txt or "", "source": "maw", "path": path}
+        return {
+            "type": ext.lstrip(".") or "text",
+            "text": txt or "",
+            "source": "maw",
+            "path": path,
+        }
     except Exception:
         pass
     # Stdlib fallback (lightweight formats)

@@ -1,11 +1,12 @@
 """Transport tests — multi-port probing + store-and-forward spool (pure stdlib)."""
+
 import os
 import socket
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import transport as t
+from rabbitghost import transport as t  # noqa: E402
 
 
 def _listener():

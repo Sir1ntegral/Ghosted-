@@ -15,6 +15,7 @@ One sane, coordinated path to "always online":
 Honest limit: zero physical link/radio = no traffic. This coordinates every path that
 *does* exist; it cannot conjure one that doesn't.
 """
+
 from __future__ import annotations
 
 import os
@@ -61,7 +62,9 @@ def sovereign_get(url: str, *, timeout: float = 15.0) -> dict:
     try:
         from rabbit.core.sovereign_downloader import sovereign_http_get
 
-        r = sovereign_http_get(url, connect_timeout=int(timeout), read_timeout=int(timeout))
+        r = sovereign_http_get(
+            url, connect_timeout=int(timeout), read_timeout=int(timeout)
+        )
         if getattr(r, "success", False) and getattr(r, "body", None):
             return {"ok": True, "bytes": len(r.body), "via": "sovereign-masked"}
         return {"ok": False, "error": getattr(r, "error", "fetch failed")}
@@ -72,7 +75,8 @@ def sovereign_get(url: str, *, timeout: float = 15.0) -> dict:
 
 def start_hotspot(ssid: str = "RabbitMesh", password: str = "rabbitmesh1234") -> dict:
     """Stand up a WiFi hotspot so peers join + the mesh runs over it (Windows netsh).
-    Needs admin + a hosted-network-capable adapter; reports the outcome, never crashes."""
+    Needs admin + a hosted-network-capable adapter; reports the outcome, never crashes.
+    """
     if os.name != "nt":
         return {"ok": False, "error": "self-hotspot is implemented for Windows here"}
     if len(password) < 8:
@@ -81,12 +85,26 @@ def start_hotspot(ssid: str = "RabbitMesh", password: str = "rabbitmesh1234") ->
 
     try:
         subprocess.run(
-            ["netsh", "wlan", "set", "hostednetwork", "mode=allow",
-             f"ssid={ssid}", f"key={password}"],
-            check=True, capture_output=True, text=True, timeout=20,
+            [
+                "netsh",
+                "wlan",
+                "set",
+                "hostednetwork",
+                "mode=allow",
+                f"ssid={ssid}",
+                f"key={password}",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
-        r = subprocess.run(["netsh", "wlan", "start", "hostednetwork"],
-                           capture_output=True, text=True, timeout=20)
+        r = subprocess.run(
+            ["netsh", "wlan", "start", "hostednetwork"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
         ok = r.returncode == 0
         return {"ok": ok, "ssid": ssid, "detail": (r.stdout or r.stderr).strip()[:200]}
     except Exception as e:  # noqa: BLE001
@@ -99,8 +117,12 @@ def stop_hotspot() -> dict:
     import subprocess
 
     try:
-        r = subprocess.run(["netsh", "wlan", "stop", "hostednetwork"],
-                           capture_output=True, text=True, timeout=20)
+        r = subprocess.run(
+            ["netsh", "wlan", "stop", "hostednetwork"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
         return {"ok": r.returncode == 0, "detail": (r.stdout or r.stderr).strip()[:200]}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)}

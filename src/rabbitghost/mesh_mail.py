@@ -8,6 +8,7 @@ the peer is offline so it completes the instant the peer returns.
 
 Run a receiver:   python -m rabbitghost.mesh_mail [port]
 """
+
 from __future__ import annotations
 
 import http.client
@@ -31,7 +32,9 @@ def _accept_ip(ip: str) -> bool:
 
 
 def _store(token: str) -> str:
-    path = os.path.join(mail._mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box")
+    path = os.path.join(
+        mail._mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box"
+    )
     with open(path, "w", encoding="ascii") as fh:
         fh.write(token)
     return path
@@ -64,7 +67,7 @@ class _Inbox(BaseHTTPRequestHandler):
         try:
             token = raw.decode("ascii")  # valid black-box tokens are base64 ASCII
         except UnicodeDecodeError:
-            self.send_response(400)       # non-ASCII junk → reject (was a write crash)
+            self.send_response(400)  # non-ASCII junk → reject (was a write crash)
             self.end_headers()
             return
         _store(token)  # store the opaque black box; only the key-holder can open it
@@ -80,7 +83,9 @@ class _Inbox(BaseHTTPRequestHandler):
 def receiver(port: int = INBOX_PORT) -> None:
     """Run the mesh inbox — accepts black-box mail from WireGuard peers, stores it."""
     httpd = ThreadingHTTPServer(("0.0.0.0", port), _Inbox)
-    print(f"🐰 mesh inbox on :{port} — accepting black-box mail from loopback + 10.44.* peers")
+    print(
+        f"🐰 mesh inbox on :{port} — accepting black-box mail from loopback + 10.44.* peers"
+    )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -90,9 +95,15 @@ def receiver(port: int = INBOX_PORT) -> None:
 def _post_token(host: str, port: int, token: str, timeout: float = 8.0) -> bool:
     conn = http.client.HTTPConnection(host, port, timeout=timeout)
     try:
-        conn.request("POST", "/inbox", body=token.encode("ascii"),
-                     headers={"Content-Type": "application/octet-stream",
-                              "Content-Length": str(len(token))})
+        conn.request(
+            "POST",
+            "/inbox",
+            body=token.encode("ascii"),
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(len(token)),
+            },
+        )
         resp = conn.getresponse()
         ok = resp.status == 200
         resp.read()
@@ -105,19 +116,31 @@ def deliver(peer_host: str, token: str, *, port: int = INBOX_PORT, ports=None) -
     """Deliver a sealed token to a peer. Multi-port (a dead port isn't fatal); on any
     failure the token is spooled for store-and-forward retry."""
     candidates = ports or (port, 443, 80, 8443)
-    open_port = next((p for p in candidates if transport.port_reachable(peer_host, p, 2.0)), None)
+    open_port = next(
+        (p for p in candidates if transport.port_reachable(peer_host, p, 2.0)), None
+    )
     if open_port is not None:
         try:
             if _post_token(peer_host, open_port, token):
                 return {"delivered": True, "port": open_port}
         except Exception:
             pass
-    jid = transport.Spool("mesh_mail").enqueue({"peer": peer_host, "port": port, "token": token})
+    jid = transport.Spool("mesh_mail").enqueue(
+        {"peer": peer_host, "port": port, "token": token}
+    )
     return {"delivered": False, "spooled": jid}
 
 
-def send_to(peer_host: str, to: str, subject: str, body: str, passphrase: str,
-            *, sender: str = "me", port: int = INBOX_PORT) -> dict:
+def send_to(
+    peer_host: str,
+    to: str,
+    subject: str,
+    body: str,
+    passphrase: str,
+    *,
+    sender: str = "me",
+    port: int = INBOX_PORT,
+) -> dict:
     """Compose a black box and deliver it to a peer over the mesh (spool if offline)."""
     token = mail.compose(to, subject, body, passphrase, sender=sender)
     return deliver(peer_host, token, port=port)
@@ -129,7 +152,9 @@ def flush_outbound() -> dict:
 
     def _send(payload: dict) -> bool:
         try:
-            return _post_token(payload["peer"], payload.get("port", INBOX_PORT), payload["token"])
+            return _post_token(
+                payload["peer"], payload.get("port", INBOX_PORT), payload["token"]
+            )
         except Exception:
             return False
 

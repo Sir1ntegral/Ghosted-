@@ -14,6 +14,7 @@ WireGuard vault
 
 All crypto is Rabbit's own: RABBIT-KDF-1 (passphrase → key) + RABBIT-CIPHER-1.
 """
+
 from __future__ import annotations
 
 import base64
@@ -61,7 +62,9 @@ def is_initialized() -> bool:
 def initialize(passphrase: str) -> None:
     """Set the master password (once). Stores only an encrypted verifier."""
     if not passphrase or len(passphrase) < 12:
-        raise ValueError("passphrase too short (min 12 chars — it seals the whole mesh + mail vault)")
+        raise ValueError(
+            "passphrase too short (min 12 chars — it seals the whole mesh + mail vault)"
+        )
     with open(_sentinel_path(), "w", encoding="ascii") as fh:
         fh.write(_seal(_SENTINEL, passphrase))
 
@@ -113,7 +116,9 @@ def unseal_mesh(passphrase: str) -> dict:
         return _unseal(fh.read(), passphrase)
 
 
-def build_and_seal_mesh(devices: list[tuple[str, str]], passphrase: str, hub: str = "") -> list[str]:
+def build_and_seal_mesh(
+    devices: list[tuple[str, str]], passphrase: str, hub: str = ""
+) -> list[str]:
     """Generate a sovereign WireGuard PackMesh for *devices* [(name, endpoint), ...]
     and seal every config at rest behind the master password. Returns device names."""
     if not login(passphrase):

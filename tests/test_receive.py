@@ -1,4 +1,5 @@
 """External-receive tests — sovereign SMTP inbox (opt 3) + IMAP pull (opt 2)."""
+
 import os
 import smtplib
 import socket
@@ -27,13 +28,17 @@ def test_smtp_inbox_blackboxes_inbound(tmp_path, monkeypatch):
     port = _free_port()
     threading.Thread(
         target=smtp_inbox.serve,
-        kwargs={"port": port, "key": "inboxkey", "host": "127.0.0.1"}, daemon=True,
+        kwargs={"port": port, "key": "inboxkey", "host": "127.0.0.1"},
+        daemon=True,
     ).start()
     time.sleep(1)
 
     sm = smtplib.SMTP("127.0.0.1", port, timeout=10)
-    sm.sendmail("alice@external.com", ["lucy@sovereign.dmn"],
-                "Subject: Hello\r\n\r\nthis is the external body")
+    sm.sendmail(
+        "alice@external.com",
+        ["lucy@sovereign.dmn"],
+        "Subject: Hello\r\n\r\nthis is the external body",
+    )
     sm.quit()
     time.sleep(0.4)
 
@@ -66,7 +71,9 @@ def test_imap_pull_blackboxes(tmp_path, monkeypatch):
         def logout(self):
             pass
 
-    monkeypatch.setattr("imaplib.IMAP4_SSL", lambda host, port, **kw: FakeIMAP(host, port))
+    monkeypatch.setattr(
+        "imaplib.IMAP4_SSL", lambda host, port, **kw: FakeIMAP(host, port)
+    )
     res = imap_pull.pull_imap("imap.gmail.com", "lucy@gmail.com", "app-pass", "mykey")
     assert res["sealed"] == 2
 

@@ -1,4 +1,5 @@
 """Mesh delivery tests — black-box mail moves peer-to-peer; offline → spool."""
+
 import os
 import socket
 import sys
@@ -24,10 +25,14 @@ def test_mesh_delivery_roundtrip(tmp_path, monkeypatch):
     from rabbitghost import mail, mesh_mail
 
     port = _free_port()
-    threading.Thread(target=mesh_mail.receiver, kwargs={"port": port}, daemon=True).start()
+    threading.Thread(
+        target=mesh_mail.receiver, kwargs={"port": port}, daemon=True
+    ).start()
     time.sleep(1)
 
-    res = mesh_mail.send_to("127.0.0.1", "rabbit", "subject", "secret body", "passphrase123", port=port)
+    res = mesh_mail.send_to(
+        "127.0.0.1", "rabbit", "subject", "secret body", "passphrase123", port=port
+    )
     assert res["delivered"] is True
 
     boxes = mail.inbox()
@@ -41,6 +46,8 @@ def test_deliver_offline_spools(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     from rabbitghost import mesh_mail, transport
 
-    res = mesh_mail.deliver("10.255.255.1", "opaque-token", port=9, ports=(9,))  # unreachable
+    res = mesh_mail.deliver(
+        "10.255.255.1", "opaque-token", port=9, ports=(9,)
+    )  # unreachable
     assert res["delivered"] is False and "spooled" in res
     assert len(transport.Spool("mesh_mail")) == 1

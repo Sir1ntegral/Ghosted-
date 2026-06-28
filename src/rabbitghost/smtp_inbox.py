@@ -12,6 +12,7 @@ without an explicit key (no inbound mail sealed under a shared default).
 
     RABBIT_INBOX_KEY=yourkey python -m rabbitghost.smtp_inbox 25
 """
+
 from __future__ import annotations
 
 import os
@@ -21,10 +22,12 @@ import threading
 
 from rabbitghost import mail
 
-_MAX_BYTES = int(os.environ.get("RABBIT_INBOX_MAX_BYTES", str(25 * 1024 * 1024)))  # 25MB/msg
+_MAX_BYTES = int(
+    os.environ.get("RABBIT_INBOX_MAX_BYTES", str(25 * 1024 * 1024))
+)  # 25MB/msg
 _MAX_LINE = 8192
-_TIMEOUT = 30           # slowloris / idle-peer guard
-_MAX_CONN = 64          # bound thread fan-out
+_TIMEOUT = 30  # slowloris / idle-peer guard
+_MAX_CONN = 64  # bound thread fan-out
 _sem = threading.BoundedSemaphore(_MAX_CONN)
 
 
@@ -85,8 +88,10 @@ def _handle(conn: socket.socket, key: str) -> None:
                     mail.seal_inbound(envelope, key)  # black-box AT REST immediately
                     send("250 queued (black-boxed)")
                 except Exception as e:  # noqa: BLE001 — fail CLOSED, never false-ACK
-                    print(f"[smtp_inbox] seal failed, asking sender to retry: {type(e).__name__}",
-                          file=sys.stderr)
+                    print(
+                        f"[smtp_inbox] seal failed, asking sender to retry: {type(e).__name__}",
+                        file=sys.stderr,
+                    )
                     send("451 4.3.0 temporary failure, retry later")
                 mailfrom, rcpts = None, []
             elif up == "RSET":
@@ -115,8 +120,10 @@ def _wrap(conn: socket.socket, key: str) -> None:
 def serve(port: int = 25, key: str | None = None, host: str = "0.0.0.0") -> None:
     key = key or os.environ.get("RABBIT_INBOX_KEY")
     if not key:
-        raise SystemExit("refusing to start: set RABBIT_INBOX_KEY "
-                         "(inbound mail must not be sealed under a shared default key)")
+        raise SystemExit(
+            "refusing to start: set RABBIT_INBOX_KEY "
+            "(inbound mail must not be sealed under a shared default key)"
+        )
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if os.name == "nt":  # Windows: exclusive bind, no hijack
         try:

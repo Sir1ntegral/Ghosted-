@@ -1,4 +1,5 @@
 """Contacts, mail filters, and black-box email search."""
+
 import os
 import sys
 
@@ -13,7 +14,7 @@ def test_contacts_add_resolve_remove(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     from rabbitghost import contacts
 
-    contacts.add_contact("Rabbit", "rabbit")                 # bare -> @sovereign.dmn
+    contacts.add_contact("Rabbit", "rabbit")  # bare -> @sovereign.dmn
     contacts.add_contact("Bob", "bob@gmail.com", tags=["work"])
     assert contacts.resolve("Rabbit") == "rabbit@sovereign.dmn"
     assert contacts.resolve("Bob") == "bob@gmail.com"
@@ -28,13 +29,17 @@ def test_filters_match_and_actions(tmp_path, monkeypatch):
     from rabbitghost import mail_filters as mf
 
     mf.add_filter("from", "contains", "spam@", "block", name="block-spam")
-    mf.add_filter("subject", "contains", "invoice", "tag", arg="finance", name="tag-fin")
+    mf.add_filter(
+        "subject", "contains", "invoice", "tag", arg="finance", name="tag-fin"
+    )
     mf.add_filter("from", "contains", "lucy@", "star", name="star-lucy")
 
     spam = mf.apply_filters({"from": "spam@bad.com", "subject": "hi", "body": ""})
     assert spam["blocked"] is True
 
-    inv = mf.apply_filters({"from": "lucy@sovereign.dmn", "subject": "Your invoice", "body": ""})
+    inv = mf.apply_filters(
+        {"from": "lucy@sovereign.dmn", "subject": "Your invoice", "body": ""}
+    )
     assert "finance" in inv["tags"] and inv["starred"] is True
 
     assert mf.remove_filter("block-spam") is True
@@ -55,7 +60,9 @@ def test_mail_search_requires_key_and_matches(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     from rabbitghost import mail
 
-    mail.send("rabbit", "Project Falcon", "the eagle lands at noon", "key123", sender="lucy")
+    mail.send(
+        "rabbit", "Project Falcon", "the eagle lands at noon", "key123", sender="lucy"
+    )
     mail.send("rabbit", "Lunch", "tacos on tuesday", "key123", sender="lucy")
 
     hits = mail.search("falcon", "key123")

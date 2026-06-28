@@ -1,10 +1,11 @@
 """External SMTP-send bridge tests — mocked relay (no real server, no network)."""
+
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import bridge
+from rabbitghost import bridge  # noqa: E402
 
 
 def test_send_external_builds_and_relays(monkeypatch):
@@ -33,9 +34,13 @@ def test_send_external_builds_and_relays(monkeypatch):
     monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
 
     res = bridge.send_external(
-        "bob@gmail.com", "hi", "body text",
-        from_addr="lucy@gmail.com", smtp_host="smtp.gmail.com",
-        username="lucy@gmail.com", password="app-password",
+        "bob@gmail.com",
+        "hi",
+        "body text",
+        from_addr="lucy@gmail.com",
+        smtp_host="smtp.gmail.com",
+        username="lucy@gmail.com",
+        password="app-password",
     )
     assert res["sent"] is True and res["via"] == "smtp.gmail.com:587"
     assert captured["host"] == "smtp.gmail.com" and captured["tls"] is True

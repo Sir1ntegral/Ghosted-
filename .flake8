@@ -1,0 +1,7 @@
+# Lint policy mirrors the sister RabbitProject CI gate: flake8 enforces real
+# bugs (F-codes, logical E7); cosmetic line-length is left to the formatter
+# (black/isort), so E501 is not double-enforced here. E203/W503 conflict with
+# black and are disabled per black's own guidance.
+[flake8]
+max-line-length = 100
+extend-ignore = E203, W503, E501

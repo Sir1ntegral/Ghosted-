@@ -9,6 +9,7 @@ Honest: this is NOT sovereign — Rabbit logs into a third-party inbox to read i
 opt-in; the sovereign default remains @sovereign.dmn mesh mail. Once pulled, messages
 are sealed immediately so they never sit on disk readable.
 """
+
 from __future__ import annotations
 
 import imaplib
@@ -20,9 +21,18 @@ from rabbitghost import mail
 _TIMEOUT = 30  # never hang the calling thread on a dead/slow provider
 
 
-def pull_imap(host: str, username: str, password: str, key: str, *,
-              port: int = 993, folder: str = "INBOX", limit: int = 50, use_ssl: bool = True,
-              ssl_context: "ssl.SSLContext | None" = None) -> dict:
+def pull_imap(
+    host: str,
+    username: str,
+    password: str,
+    key: str,
+    *,
+    port: int = 993,
+    folder: str = "INBOX",
+    limit: int = 50,
+    use_ssl: bool = True,
+    ssl_context: "ssl.SSLContext | None" = None,
+) -> dict:
     """Fetch up to `limit` newest messages from an IMAP inbox; black-box each at rest.
     Returns the count sealed. Credentials are used for this call only.
 
@@ -45,7 +55,11 @@ def pull_imap(host: str, username: str, password: str, key: str, *,
             _typ, msgdata = M.fetch(i, "(RFC822)")
             if msgdata and msgdata[0]:
                 raw = msgdata[0][1]
-                raw = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
+                raw = (
+                    raw.decode("utf-8", "replace")
+                    if isinstance(raw, (bytes, bytearray))
+                    else str(raw)
+                )
                 mail.seal_inbound(raw, key)
                 sealed += 1
     finally:
@@ -56,9 +70,17 @@ def pull_imap(host: str, username: str, password: str, key: str, *,
     return {"sealed": sealed, "via": f"imap:{host}"}
 
 
-def pull_pop(host: str, username: str, password: str, key: str, *,
-             port: int = 995, limit: int = 50, use_ssl: bool = True,
-             ssl_context: "ssl.SSLContext | None" = None) -> dict:
+def pull_pop(
+    host: str,
+    username: str,
+    password: str,
+    key: str,
+    *,
+    port: int = 995,
+    limit: int = 50,
+    use_ssl: bool = True,
+    ssl_context: "ssl.SSLContext | None" = None,
+) -> dict:
     """Fetch up to `limit` newest messages from a POP3 inbox; black-box each at rest.
     Hardened: TLS verified by default; credentials never sent over a non-TLS link."""
     if not use_ssl and password:

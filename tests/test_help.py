@@ -1,10 +1,11 @@
 """Help feature — covers everything; no drift between commands and their docs."""
+
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import help_text
+from rabbitghost import help_text  # noqa: E402
 
 
 def test_overview_and_detail():
@@ -17,9 +18,28 @@ def test_overview_and_detail():
 
 def test_help_documents_every_console_command():
     helped = {c.split()[0] for items in help_text.HELP.values() for (c, _, _) in items}
-    for cmd in ("recon", "browse", "forge", "cloak", "uncloak", "encrypt", "decrypt",
-                "login", "network", "connect", "hotspot", "spool", "identity",
-                "contacts", "filters", "mailsearch", "parse", "status", "help", "quit"):
+    for cmd in (
+        "recon",
+        "browse",
+        "forge",
+        "cloak",
+        "uncloak",
+        "encrypt",
+        "decrypt",
+        "login",
+        "network",
+        "connect",
+        "hotspot",
+        "spool",
+        "identity",
+        "contacts",
+        "filters",
+        "mailsearch",
+        "parse",
+        "status",
+        "help",
+        "quit",
+    ):
         assert cmd in helped, f"'{cmd}' missing from HELP — docs drifted from commands"
 
 

@@ -11,6 +11,7 @@ Google ranks on keywords + link graph. Rabbit re-ranks the candidate set on:
 Pure-Python core, zero hard deps. NEVER raises: on any failure the original order
 is returned unchanged, so search degrades but never breaks (exemplary consistency).
 """
+
 from __future__ import annotations
 
 import math
@@ -26,14 +27,49 @@ def _toks(s: str) -> list[str]:
 
 # Sovereign sentiment lexicon — small, owned, no deps.
 _POS = {
-    "good", "great", "best", "excellent", "trusted", "secure", "reliable", "fast",
-    "free", "official", "verified", "safe", "proven", "accurate", "helpful",
-    "recommended", "powerful", "robust", "stable", "open", "privacy",
+    "good",
+    "great",
+    "best",
+    "excellent",
+    "trusted",
+    "secure",
+    "reliable",
+    "fast",
+    "free",
+    "official",
+    "verified",
+    "safe",
+    "proven",
+    "accurate",
+    "helpful",
+    "recommended",
+    "powerful",
+    "robust",
+    "stable",
+    "open",
+    "privacy",
 }
 _NEG = {
-    "bad", "worst", "scam", "insecure", "slow", "broken", "fake", "malware",
-    "danger", "dangerous", "unsafe", "error", "fail", "vulnerable", "useless",
-    "deprecated", "warning", "phishing", "tracking", "breach",
+    "bad",
+    "worst",
+    "scam",
+    "insecure",
+    "slow",
+    "broken",
+    "fake",
+    "malware",
+    "danger",
+    "dangerous",
+    "unsafe",
+    "error",
+    "fail",
+    "vulnerable",
+    "useless",
+    "deprecated",
+    "warning",
+    "phishing",
+    "tracking",
+    "breach",
 }
 
 
@@ -143,14 +179,17 @@ def warm() -> None:
 
 def rerank(query: str, results: list):
     """Re-rank web results with surgical precision. Returns the same objects,
-    re-ordered, each annotated with _rabbit_score / _rabbit_sentiment / _rabbit_semantic."""
+    re-ordered, each annotated with _rabbit_score / _rabbit_sentiment / _rabbit_semantic.
+    """
     try:
         qtoks = _toks(query)
         if not qtoks or not results:
             return results
         model = _semantic_model()
         qvec = model.embed(query) if model else None
-        q_intent = _intent_domain(query)  # the reasoning dominance engine's read of intent
+        q_intent = _intent_domain(
+            query
+        )  # the reasoning dominance engine's read of intent
         scored = []
         for r in results:
             title = getattr(r, "title", "") or ""
@@ -169,9 +208,18 @@ def rerank(query: str, results: list):
             senti = _sentiment(text)
             # intent: result whose dominant domain matches the query's intent-domain is
             # surgically boosted — tightens accuracy to what the search actually MEANS.
-            intent_boost = 1.2 if (q_intent is not None and _intent_domain(text) == q_intent) else 0.0
+            intent_boost = (
+                1.2
+                if (q_intent is not None and _intent_domain(text) == q_intent)
+                else 0.0
+            )
             # blended: meaning (when available) + lexical context + intent + positive tiebreak
-            score = (2.0 * sem if qvec is not None else 0.0) + lex + intent_boost + 0.3 * max(0.0, senti)
+            score = (
+                (2.0 * sem if qvec is not None else 0.0)
+                + lex
+                + intent_boost
+                + 0.3 * max(0.0, senti)
+            )
             scored.append((score, senti, sem, r))
         scored.sort(key=lambda x: x[0], reverse=True)
         out = []

@@ -4,6 +4,7 @@ Contact list — names <-> addresses (sovereign or external), persisted locally.
 Bare names qualify to @sovereign.dmn (mail.address); addresses with an @ are kept
 as-is (any provider). resolve() turns a known name into its address for composing.
 """
+
 from __future__ import annotations
 
 import json

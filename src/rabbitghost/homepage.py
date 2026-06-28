@@ -47,7 +47,9 @@ _LOCAL_IPS_CACHE: dict = {"ips": None, "at": 0.0}
 def _all_local_ips() -> list[str]:
     # Cached 60s: the getaddrinfo + UDP-socket enumeration was running on EVERY
     # page render (egress was cached, this was missed). Local IPs rarely change.
-    if _LOCAL_IPS_CACHE["ips"] is not None and (time.time() - _LOCAL_IPS_CACHE["at"] < 60):
+    if _LOCAL_IPS_CACHE["ips"] is not None and (
+        time.time() - _LOCAL_IPS_CACHE["at"] < 60
+    ):
         return _LOCAL_IPS_CACHE["ips"]
     ips: set[str] = set()
     try:
@@ -71,7 +73,7 @@ def _classify(ips: list[str]) -> dict[str, list[str]]:
         if ip.startswith("127."):
             out["loopback"].append(ip)
         elif ip.startswith("10.44."):
-            out["wireguard"].append(ip)          # Rabbit PackMesh default subnet
+            out["wireguard"].append(ip)  # Rabbit PackMesh default subnet
         else:
             out["lan"].append(ip)
     return out
@@ -84,12 +86,16 @@ def _egress_ip() -> str:
     """What the outside world sees — via Rabbit's own sovereign HTTP (masked).
     Cached 120s so it never blocks page renders (perf: was adding ~5s/request)."""
     import time
+
     if _EGRESS_CACHE["ip"] and (time.time() - _EGRESS_CACHE["at"] < 120):
         return _EGRESS_CACHE["ip"]
     val = "unknown (offline or fetch failed)"
     try:
         from rabbit.core.sovereign_downloader import sovereign_http_get
-        r = sovereign_http_get("https://api.ipify.org", connect_timeout=5, read_timeout=5)
+
+        r = sovereign_http_get(
+            "https://api.ipify.org", connect_timeout=5, read_timeout=5
+        )
         if r.success and r.body:
             val = r.body.decode(errors="replace").strip()
     except Exception:
@@ -102,11 +108,15 @@ def _egress_ip() -> str:
 def _search(query: str) -> list:
     try:
         from rabbit.research.sovereign_browser_engine import SovereignBrowserEngine
+
         results = SovereignBrowserEngine().web_search(query)
     except Exception as e:  # never let the page 500
-        return [type("E", (), {"title": "search error", "url": "", "snippet": str(e)})()]
+        return [
+            type("E", (), {"title": "search error", "url": "", "snippet": str(e)})()
+        ]
     try:  # semantic re-rank: meaning / context / sentiment (degrades, never breaks)
         from rabbitghost import semantic_search as rabbit_search
+
         return rabbit_search.rerank(query, results)
     except Exception:
         return results
@@ -138,11 +148,16 @@ def _gate():
             return _GATE
         try:
             from rabbit.security.boundary.gojo_boundary import GojoBoundaryGate
+
             ap = _gojo_audit_path()
             _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()
-            print("🛡  Gojo boundary engaged — every request is gated, throttled, audited.")
+            print(
+                "🛡  Gojo boundary engaged — every request is gated, throttled, audited."
+            )
         except Exception as e:
-            print(f"[gojo] boundary unavailable — network access will be REFUSED, localhost only: {e}")
+            print(
+                f"[gojo] boundary unavailable — network access will be REFUSED, localhost only: {e}"
+            )
             _GATE = None
         _GATE_TRIED = True  # set LAST, after _GATE is assigned
     return _GATE
@@ -158,7 +173,7 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
     if local:
         source_class = "network_local"
     elif client_ip.startswith("10.44."):
-        source_class = "network_mesh"      # 10.44.* = WireGuard mesh subnet (reachability, NOT crypto proof of identity — the WG tunnel authenticates the peer at the kernel; this prefix only routes trust tier)
+        source_class = "network_mesh"  # 10.44.* = WireGuard mesh subnet (reachability, NOT crypto proof of identity — the WG tunnel authenticates the peer at the kernel; this prefix only routes trust tier)
     else:
         source_class = "network_remote"
     try:
@@ -356,12 +371,18 @@ def _results_page(query: str) -> str:
         senti = getattr(r, "_rabbit_sentiment", None)
         badge = ""
         if score is not None:
-            mood = "😊 positive" if (senti or 0) > 0.15 else ("⚠ negative" if (senti or 0) < -0.15 else "· neutral")
+            mood = (
+                "😊 positive"
+                if (senti or 0) > 0.15
+                else ("⚠ negative" if (senti or 0) < -0.15 else "· neutral")
+            )
             sem = getattr(r, "_rabbit_semantic", 0.0)
             meaning = f" · meaning {sem}" if sem else ""
             badge = f'<div class="b">relevance {score}{meaning} · sentiment {senti} {mood}</div>'
-        rows.append(f'<div class="r"><a href="{href}">{title}</a>'
-                    f'<div class="u">{url}</div><div class="s">{snip}</div>{badge}</div>')
+        rows.append(
+            f'<div class="r"><a href="{href}">{title}</a>'
+            f'<div class="u">{url}</div><div class="s">{snip}</div>{badge}</div>'
+        )
     body = "".join(rows) or '<div class="r">no results</div>'
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
@@ -382,13 +403,13 @@ def _results_page(query: str) -> str:
 # ── app login gate ─────────────────────────────────────────────────────────
 # Localhost is always open (you're at the machine). Remote (LAN / WireGuard mesh)
 # must unlock with the vault master password — then it rides a session cookie.
-_SESSIONS: dict = {}                 # token -> expiry epoch
+_SESSIONS: dict = {}  # token -> expiry epoch
 _SESSIONS_LOCK = threading.Lock()
-_SESSION_TTL = 12 * 3600             # sessions expire after 12h
-_SESSIONS_MAX = 1024                 # bound the map (anti-growth)
-_LOGIN_FAILS: dict = {}              # ip -> (fail_count, window_start) — brute-force guard
-_LOGIN_MAX = 5                       # failures per window before lockout
-_LOGIN_WINDOW = 300                  # 5 min
+_SESSION_TTL = 12 * 3600  # sessions expire after 12h
+_SESSIONS_MAX = 1024  # bound the map (anti-growth)
+_LOGIN_FAILS: dict = {}  # ip -> (fail_count, window_start) — brute-force guard
+_LOGIN_MAX = 5  # failures per window before lockout
+_LOGIN_WINDOW = 300  # 5 min
 
 
 def _local_ip(ip: str) -> bool:
@@ -414,7 +435,7 @@ def _is_authed(handler) -> bool:
         exp = _SESSIONS.get(tok)
         if exp is None:
             return False
-        if exp <= time.time():           # expired → evict + deny
+        if exp <= time.time():  # expired → evict + deny
             _SESSIONS.pop(tok, None)
             return False
         return True
@@ -424,11 +445,20 @@ def _login_page(msg: str = "") -> str:
     initd = True
     try:
         from rabbitghost import vault
+
         initd = vault.is_initialized()
     except Exception:
         pass
-    note = "" if initd else '<div class="tag">no master password set yet — run <b>login</b> in the console first</div>'
-    err = f'<div class="tag" style="color:#ff8aa0">{html.escape(msg)}</div>' if msg else ""
+    note = (
+        ""
+        if initd
+        else '<div class="tag">no master password set yet — run <b>login</b> in the console first</div>'
+    )
+    err = (
+        f'<div class="tag" style="color:#ff8aa0">{html.escape(msg)}</div>'
+        if msg
+        else ""
+    )
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Rabbit — unlock</title><style>{_CSS}</style></head><body>
 <div class="logo">🐰 <b>Rabbit</b></div>
@@ -447,14 +477,18 @@ def _help_page() -> str:
     for cat, items in help_text.HELP.items():
         rows.append(f'<div class="hc">{html.escape(cat)}</div>')
         for cmd, summary, detail in items:
-            rows.append(f'<div class="hr"><b>{html.escape(cmd)}</b><span>{html.escape(summary)}</span>'
-                        f'<div class="hd">{html.escape(detail)}</div></div>')
+            rows.append(
+                f'<div class="hr"><b>{html.escape(cmd)}</b><span>{html.escape(summary)}</span>'
+                f'<div class="hd">{html.escape(detail)}</div></div>'
+            )
     body = "".join(rows)
-    extra = ("<style>.help{width:min(760px,92vw);margin:26px 0 90px}"
-             ".hc{color:#9aa9ff;font-size:18px;font-weight:600;margin:22px 0 8px}"
-             ".hr{padding:10px 0;border-bottom:1px solid #1c2138}"
-             ".hr b{color:#cfd6ff;font-size:14px}.hr span{color:#8890b5;font-size:13px;margin-left:10px}"
-             ".hd{color:#aeb6dc;font-size:13px;margin-top:5px;line-height:1.45}</style>")
+    extra = (
+        "<style>.help{width:min(760px,92vw);margin:26px 0 90px}"
+        ".hc{color:#9aa9ff;font-size:18px;font-weight:600;margin:22px 0 8px}"
+        ".hr{padding:10px 0;border-bottom:1px solid #1c2138}"
+        ".hr b{color:#cfd6ff;font-size:14px}.hr span{color:#8890b5;font-size:13px;margin-left:10px}"
+        ".hd{color:#aeb6dc;font-size:13px;margin-top:5px;line-height:1.45}</style>"
+    )
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Rabbit — Help</title>
 <style>{_CSS}</style>{extra}</head><body>
 <div class="logo" style="font-size:40px;margin-top:7vh">🐰 <b>Rabbit</b> Help</div>
@@ -529,6 +563,7 @@ class _Handler(BaseHTTPRequestHandler):
             ok = False
             try:
                 from rabbitghost import vault
+
                 ok = vault.login(pw)
             except Exception:
                 ok = False
@@ -545,12 +580,14 @@ class _Handler(BaseHTTPRequestHandler):
                 now = time.time()
                 with _SESSIONS_LOCK:
                     for _k in [k for k, v in _SESSIONS.items() if v <= now]:
-                        _SESSIONS.pop(_k, None)      # prune expired
+                        _SESSIONS.pop(_k, None)  # prune expired
                     if len(_SESSIONS) >= _SESSIONS_MAX:
-                        _SESSIONS.clear()            # hard cap
+                        _SESSIONS.clear()  # hard cap
                     _SESSIONS[tok] = now + _SESSION_TTL
                 self.send_response(303)
-                self.send_header("Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict")
+                self.send_header(
+                    "Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict"
+                )
                 self.send_header("Location", "/")
                 self.end_headers()
             else:
@@ -569,7 +606,9 @@ def serve(port: int = _PORT) -> None:
     # Pre-warm the dominance/intent engine in the background so the first search is fast.
     try:
         import threading as _t
+
         from rabbitghost import semantic_search as rabbit_search
+
         _t.Thread(target=rabbit_search.warm, daemon=True).start()
     except Exception:
         pass

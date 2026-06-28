@@ -6,6 +6,7 @@ applies an action (tag/star/block/folder). apply_filters() evaluates all rules o
 decrypted message dict and returns the combined verdict. Sovereign + local; the caller
 decides when to run them (on receive, or when listing).
 """
+
 from __future__ import annotations
 
 import json
@@ -32,10 +33,14 @@ def _load() -> list:
 
 
 def _save(fs: list) -> None:
-    mail.atomic_write_json(_path(), fs)  # crash-safe — block-rules never silently vanish
+    mail.atomic_write_json(
+        _path(), fs
+    )  # crash-safe — block-rules never silently vanish
 
 
-def add_filter(field: str, op: str, value: str, action: str, *, arg: str = "", name: str = "") -> dict:
+def add_filter(
+    field: str, op: str, value: str, action: str, *, arg: str = "", name: str = ""
+) -> dict:
     field, op, action = field.lower(), op.lower(), action.lower()
     if field not in _FIELDS:
         raise ValueError(f"field must be one of {_FIELDS}")
@@ -43,8 +48,14 @@ def add_filter(field: str, op: str, value: str, action: str, *, arg: str = "", n
         raise ValueError(f"op must be one of {_OPS}")
     if action not in _ACTIONS:
         raise ValueError(f"action must be one of {_ACTIONS}")
-    rule = {"name": name or f"{field}-{op}-{value}", "field": field, "op": op,
-            "value": value, "action": action, "arg": arg}
+    rule = {
+        "name": name or f"{field}-{op}-{value}",
+        "field": field,
+        "op": op,
+        "value": value,
+        "action": action,
+        "arg": arg,
+    }
     fs = _load()
     fs.append(rule)
     _save(fs)

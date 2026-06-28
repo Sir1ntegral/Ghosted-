@@ -1,15 +1,20 @@
 """OCR test — RABBIT-OCR-1 via the parser. Skips unless the engine + mind + PIL present."""
+
 import os
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-pytest.importorskip("rapidocr_onnxruntime", reason="OCR engine not installed (pip install .[ocr])")
-pytest.importorskip("rabbit.perception.sovereign_ocr", reason="requires the rabbit mind")
+pytest.importorskip(
+    "rapidocr_onnxruntime", reason="OCR engine not installed (pip install .[ocr])"
+)
+pytest.importorskip(
+    "rabbit.perception.sovereign_ocr", reason="requires the rabbit mind"
+)
 PIL = pytest.importorskip("PIL")
 
-from rabbitghost import parser
+from rabbitghost import parser  # noqa: E402
 
 
 def test_ocr_extracts_text_from_image(tmp_path):

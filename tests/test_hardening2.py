@@ -1,4 +1,5 @@
 """Regression tests for the second hardening pass (new-module fixes)."""
+
 import os
 import sys
 
@@ -12,8 +13,16 @@ def test_bridge_refuses_credentials_without_tls():
     from rabbitghost import bridge
 
     with pytest.raises(ValueError):
-        bridge.send_external("a@b.com", "s", "b", from_addr="me@x.com",
-                             smtp_host="smtp.x.com", username="me", password="pw", use_tls=False)
+        bridge.send_external(
+            "a@b.com",
+            "s",
+            "b",
+            from_addr="me@x.com",
+            smtp_host="smtp.x.com",
+            username="me",
+            password="pw",
+            use_tls=False,
+        )
 
 
 def test_imap_refuses_credentials_without_ssl():
@@ -39,6 +48,7 @@ def test_atomic_write_is_crash_safe(tmp_path):
     p = str(tmp_path / "store.json")
     mail.atomic_write_json(p, {"a": 1})
     import json
+
     assert json.load(open(p)) == {"a": 1}
     # no leftover temp files
     assert not [f for f in os.listdir(tmp_path) if f.endswith(".tmp")]

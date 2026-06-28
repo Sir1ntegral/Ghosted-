@@ -13,6 +13,7 @@ NO external pluggable-transport binaries.
 True obfs4 / snowflake / meek bridges need external PT binaries + bridge infra and
 are out of scope for this pure-software module (see task #12 notes).
 """
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,9 @@ def first_open_port(host: str, ports=COMMON_PORTS, timeout: float = 3.0):
     return None
 
 
-def online(probes=(("1.1.1.1", 443), ("8.8.8.8", 53), ("9.9.9.9", 443)), timeout: float = 3.0) -> bool:
+def online(
+    probes=(("1.1.1.1", 443), ("8.8.8.8", 53), ("9.9.9.9", 443)), timeout: float = 3.0
+) -> bool:
     """Any sliver of connectivity? True if ANY probe host:port connects."""
     return any(port_reachable(h, p, timeout) for h, p in probes)
 

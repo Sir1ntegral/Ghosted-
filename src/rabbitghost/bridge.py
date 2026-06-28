@@ -14,6 +14,7 @@ machine, so RabbitGhost does not pretend to: see ``receive_external_status()``.
 Sovereign alternative that needs none of this: @sovereign.dmn mesh mail (mail.py /
 mesh_mail.py) — end-to-end black box, peer-to-peer over WireGuard.
 """
+
 from __future__ import annotations
 
 import smtplib
@@ -48,7 +49,9 @@ def send_external(
     msg.set_content(body)
 
     if (username or password) and not use_tls:
-        raise ValueError("refusing to send SMTP credentials without TLS (set use_tls=True)")
+        raise ValueError(
+            "refusing to send SMTP credentials without TLS (set use_tls=True)"
+        )
     with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
         if use_tls:
             server.starttls(context=ssl.create_default_context())  # verified TLS
@@ -63,6 +66,6 @@ def receive_external_status() -> dict:
     return {
         "supported": False,
         "reason": "Receiving external mail needs IMAP/POP (excluded) OR your own MX "
-                  "server (registered domain + publicly-reachable SMTP host).",
+        "server (registered domain + publicly-reachable SMTP host).",
         "sovereign_alternative": "@sovereign.dmn mesh mail (mail.py / mesh_mail.py)",
     }
