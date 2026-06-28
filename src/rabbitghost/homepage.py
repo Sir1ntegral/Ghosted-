@@ -164,15 +164,16 @@ def _gate():
 
 
 def _gojo_admits(client_ip: str, path: str) -> bool:
-    """Gojo gates every request. Fail-closed: if the guard can't load or errs,
-    only loopback is served — Rabbit is NEVER exposed to the network ungated."""
-    local = client_ip.startswith("127.")
+    """Gojo gates every *network* request. Loopback is the local operator at the
+    machine — always admitted (auth for it is handled separately by _is_authed).
+    Fail-closed: for any non-local request, if the guard can't load or errs the
+    request is REFUSED — Rabbit is NEVER exposed to the network ungated."""
+    if client_ip.startswith("127."):
+        return True  # loopback = at the machine; not network exposure
     gate = _gate()
     if gate is None:
-        return local
-    if local:
-        source_class = "network_local"
-    elif client_ip.startswith("10.44."):
+        return False  # non-local + no guard → fail closed
+    if client_ip.startswith("10.44."):
         source_class = "network_mesh"  # 10.44.* = WireGuard mesh subnet (reachability, NOT crypto proof of identity — the WG tunnel authenticates the peer at the kernel; this prefix only routes trust tier)
     else:
         source_class = "network_remote"
@@ -185,7 +186,7 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
         )
         return verdict.get("decision") == "allow"
     except Exception:
-        return local  # guard error → fail closed to local-only
+        return False  # guard error on a network request → fail closed
 
 
 # ── pages ────────────────────────────────────────────────────────────────────
