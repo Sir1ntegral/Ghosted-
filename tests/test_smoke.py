@@ -14,7 +14,7 @@ def test_meaning_vectors_rank_by_meaning():
     if not importlib.util.find_spec("numpy"):
         pytest.skip("numpy not installed (meaning-vectors need it)")
     sys.path.insert(0, r"C:\Users\Admin\Desktop\RabbitProject-clean")
-    from rabbitghost import semantic_search as ss
+    from ghosted import semantic_search as ss
 
     if ss._semantic_model() is None:
         pytest.skip("trained model not available")
@@ -34,7 +34,7 @@ def test_meaning_vectors_rank_by_meaning():
 
 
 def test_semantic_search_imports_and_ranks():
-    from rabbitghost import semantic_search as ss
+    from ghosted import semantic_search as ss
 
     def R(title, snippet):
         return type("R", (), {"title": title, "snippet": snippet, "url": "http://x"})()
@@ -53,14 +53,14 @@ def test_semantic_search_imports_and_ranks():
 
 
 def test_ranker_never_raises_on_bad_input():
-    from rabbitghost import semantic_search as ss
+    from ghosted import semantic_search as ss
 
     assert ss.rerank("", []) == []
     assert len(ss.rerank("x", [type("B", (), {})()])) == 1  # missing attrs → safe
 
 
 def test_sentiment_lexicon():
-    from rabbitghost import semantic_search as ss
+    from ghosted import semantic_search as ss
 
     assert ss._sentiment("trusted secure reliable") > 0
     assert ss._sentiment("scam malware dangerous") < 0

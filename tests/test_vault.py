@@ -14,7 +14,7 @@ pytest.importorskip(
 
 def test_login_and_wireguard_vault(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import vault as v
+    from ghosted import vault as v
 
     assert not v.is_initialized()
     v.initialize("CorrectHorse42")
@@ -45,7 +45,7 @@ def test_login_and_wireguard_vault(tmp_path, monkeypatch):
 
 def test_short_passphrase_rejected(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import vault as v
+    from ghosted import vault as v
 
     with pytest.raises(ValueError):
         v.initialize("abc")

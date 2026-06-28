@@ -9,7 +9,7 @@ no inbox is ever pulled or logged into for reading.
 Receiving external mail is a fundamentally different problem. Without IMAP/POP it
 requires your OWN MX mail server — a registered public-TLD domain + a publicly
 reachable host listening on SMTP. That can't be done in pure software on a NAT'd
-machine, so RabbitGhost does not pretend to: see ``receive_external_status()``.
+machine, so Ghosted does not pretend to: see ``receive_external_status()``.
 
 Sovereign alternative that needs none of this: @sovereign.dmn mesh mail (mail.py /
 mesh_mail.py) — end-to-end black box, peer-to-peer over WireGuard.

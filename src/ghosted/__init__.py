@@ -1,4 +1,4 @@
-"""RabbitGhost — sovereign stealth console + Google-like homepage + semantic search.
+"""Ghosted — sovereign stealth console + Google-like homepage + semantic search.
 
 An application layer built on the Rabbit mind (the ``rabbit`` package). Three faces:
 

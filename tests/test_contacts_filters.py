@@ -12,7 +12,7 @@ pytest.importorskip("rabbit.core.crypto", reason="search/mail need the rabbit mi
 # ── contacts ─────────────────────────────────────────────────────────────────
 def test_contacts_add_resolve_remove(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import contacts
+    from ghosted import contacts
 
     contacts.add_contact("Rabbit", "rabbit")  # bare -> @sovereign.dmn
     contacts.add_contact("Bob", "bob@gmail.com", tags=["work"])
@@ -26,7 +26,7 @@ def test_contacts_add_resolve_remove(tmp_path, monkeypatch):
 # ── filters ──────────────────────────────────────────────────────────────────
 def test_filters_match_and_actions(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mail_filters as mf
+    from ghosted import mail_filters as mf
 
     mf.add_filter("from", "contains", "spam@", "block", name="block-spam")
     mf.add_filter(
@@ -47,7 +47,7 @@ def test_filters_match_and_actions(tmp_path, monkeypatch):
 
 def test_filter_validation(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mail_filters as mf
+    from ghosted import mail_filters as mf
 
     with pytest.raises(ValueError):
         mf.add_filter("badfield", "contains", "x", "tag")
@@ -58,7 +58,7 @@ def test_filter_validation(tmp_path, monkeypatch):
 # ── email search ─────────────────────────────────────────────────────────────
 def test_mail_search_requires_key_and_matches(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mail
+    from ghosted import mail
 
     mail.send(
         "rabbit", "Project Falcon", "the eagle lands at noon", "key123", sender="lucy"

@@ -6,7 +6,7 @@ AND it rides the authenticated WireGuard tunnel. A peer runs ``receiver()``; ``s
 delivers it (multi-port — a dead port isn't fatal), spooling for store-and-forward if
 the peer is offline so it completes the instant the peer returns.
 
-Run a receiver:   python -m rabbitghost.mesh_mail [port]
+Run a receiver:   python -m ghosted.mesh_mail [port]
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from rabbitghost import mail, transport
+from ghosted import mail, transport
 
 INBOX_PORT = 8765
 _MAX_TOKEN = 256 * 1024  # one sealed message; cap to stop abuse

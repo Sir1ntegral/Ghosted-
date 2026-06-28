@@ -81,7 +81,7 @@ def parse_text(text: str) -> dict:
 
 def _ocr(path: str) -> dict:
     try:
-        from rabbitghost.ocr import OCR
+        from ghosted.ocr import OCR
 
         res = OCR().extract(path)
         txt = getattr(res, "text", None)
@@ -111,7 +111,7 @@ def parse_file(path: str, *, max_chars: int | None = None) -> dict:
         return _ocr(path)
     # Prefer Rabbit's Maw (robust: pdf/docx/html/csv/json/txt/md)
     try:
-        from rabbitghost.docparse import Maw
+        from ghosted.docparse import Maw
 
         txt = Maw().ingest(path, max_chars=max_chars)
         return {

@@ -14,7 +14,7 @@ pytest.importorskip(
 
 def test_message_is_a_black_box_and_round_trips(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mail
+    from ghosted import mail
 
     pw = "LucyMasterKey!"
     path = mail.send(

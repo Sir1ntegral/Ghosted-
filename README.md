@@ -1,4 +1,4 @@
-# RabbitGhost 🐰
+# Ghosted 🐰
 
 A **sovereign** application built on the Rabbit mind: a stealth console, a Google-like
 search homepage, and a meaning-aware semantic search — all running on Rabbit's own
@@ -8,9 +8,9 @@ organs (no Google APIs, no third-party browser engine, no Tailscale).
 
 | Module | What it is |
 |---|---|
-| `rabbitghost.console` | Ghost stealth console — `recon`, `cloak`/`uncloak` (stego), `forge`, `network` (WireGuard PackMesh), `encrypt`/`decrypt` (RABBIT-CIPHER-1), `browse`. |
-| `rabbitghost.homepage` | Sovereign Google-like search homepage. Stdlib `http.server`, **Gojo-gated** (throttle + policy + audit), binds `0.0.0.0`, shows LAN / WireGuard / **egress** IPs. |
-| `rabbitghost.semantic_search` | Re-ranks web results by **meaning, context, sentiment** and the reasoning **Dominance Engine's** read of query **intent**. |
+| `ghosted.console` | Ghost stealth console — `recon`, `cloak`/`uncloak` (stego), `forge`, `network` (WireGuard PackMesh), `encrypt`/`decrypt` (RABBIT-CIPHER-1), `browse`. |
+| `ghosted.homepage` | Sovereign Google-like search homepage. Stdlib `http.server`, **Gojo-gated** (throttle + policy + audit), binds `0.0.0.0`, shows LAN / WireGuard / **egress** IPs. |
+| `ghosted.semantic_search` | Re-ranks web results by **meaning, context, sentiment** and the reasoning **Dominance Engine's** read of query **intent**. |
 
 ## How it browses (no third-party browser)
 
@@ -33,8 +33,8 @@ Optional extras: `pip install .[ocr]` (RABBIT-OCR-1 / RapidOCR), `.[build]` (PyI
 
 ```powershell
 $env:PYTHONPATH = "C:\path\to\RabbitProject-clean"
-python -m rabbitghost.console        # stealth console
-python -m rabbitghost.homepage       # http://127.0.0.1:7654
+python -m ghosted.console        # stealth console
+python -m ghosted.homepage       # http://127.0.0.1:7654
 ```
 
 ## Build the exe

@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import transport as t  # noqa: E402
+from ghosted import transport as t  # noqa: E402
 
 
 def _listener():

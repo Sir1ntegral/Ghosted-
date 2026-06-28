@@ -13,7 +13,7 @@ import json
 import os
 import re
 
-from rabbitghost import mail
+from ghosted import mail
 
 _FIELDS = ("from", "to", "subject", "body")
 _OPS = ("contains", "equals", "regex")

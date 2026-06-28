@@ -23,7 +23,7 @@ WHAT THIS IS *NOT* (honest boundary)
     The two are separate tools for separate jobs and must not be conflated.
 
 USAGE
-    from rabbitghost.wireguard import PackMesh
+    from ghosted.wireguard import PackMesh
     mesh = PackMesh(subnet="10.44.0.0/24")
     mesh.add_device("nuc",    endpoint="nuc.example:51820", listen_port=51820)
     mesh.add_device("laptop")
@@ -393,7 +393,7 @@ class PackMesh:
         A wg0.conf holds a private key, so leaving it as plaintext on disk is the
         weak link. Encrypted-at-rest, the key is exposed only at bring-up time
         (decrypt → ``wg-quick`` → wipe). Pairs with ``decrypt_config``."""
-        from rabbitghost import crypto
+        from ghosted import crypto
 
         base = (
             Path(out_dir)
@@ -421,7 +421,7 @@ class PackMesh:
     def decrypt_config(path: str | os.PathLike, passphrase: str) -> str:
         """Decrypt a ``*.conf.enc`` produced by ``write_encrypted`` back to the
         plaintext wg0.conf text (for piping into ``wg-quick`` at bring-up)."""
-        from rabbitghost import crypto
+        from ghosted import crypto
 
         raw = Path(path).read_bytes()
         return crypto.decrypt(crypto.EncryptedBlob.from_bytes(raw), passphrase)

@@ -54,7 +54,7 @@ else {
             Write-Host "--- Settings ---" -ForegroundColor Cyan
             $vis = Read-Host "  Repo visibility for RabbitGhost [private/public] (default private)"
             if ($vis -ne 'public') { $vis = 'private' }
-            Set-Content -Path (Join-Path $repo '.rabbitghost-setup') -Value "visibility=$vis`nusername=$username`nemail=$email" -Encoding ascii
+            Set-Content -Path (Join-Path $repo '.ghosted-setup') -Value "visibility=$vis`nusername=$username`nemail=$email" -Encoding ascii
 
             # Apply local git identity now (so the eventual push commits are attributed correctly)
             if ($fullname) { git config user.name  "$fullname" }
@@ -97,7 +97,7 @@ if ($LASTEXITCODE -eq 0) {
 }
 else {
     $vis = "private"
-    $cfgPath = Join-Path $repo '.rabbitghost-setup'
+    $cfgPath = Join-Path $repo '.ghosted-setup'
     if (Test-Path $cfgPath) {
         $m = Select-String -Path $cfgPath -Pattern '^visibility=(\w+)' | Select-Object -First 1
         if ($m) { $vis = $m.Matches[0].Groups[1].Value }

@@ -8,7 +8,7 @@ greater being; a tool stands on its own, so this is a fresh, self-contained kit.
     GhostCloak(passphrase=).cloak_payload(carrier, payload, out)  -> PNG (LSB)
                            .extract_payload(img)                  -> bytes
 
-Cloak embeds an (optionally encrypted, via rabbitghost.crypto) payload in the
+Cloak embeds an (optionally encrypted, via ghosted.crypto) payload in the
 low bits of a PNG's pixels. Encryption makes the payload a black box; wrong key
 cannot extract. Needs Pillow (degrades with a clear error if absent).
 """
@@ -55,7 +55,7 @@ class GhostMode:
         topic = (topic or "").strip()
         if not topic:
             return {"recon": "no topic given"}
-        from rabbitghost.web import SovereignBrowserEngine
+        from ghosted.web import SovereignBrowserEngine
 
         results = SovereignBrowserEngine().web_search(topic, limit=10)
         return {
@@ -122,7 +122,7 @@ class GhostCloak:
         if self._pw:
             import base64
 
-            from rabbitghost.crypto import encrypt
+            from ghosted.crypto import encrypt
 
             token = base64.b64encode(payload).decode("ascii")
             data = encrypt(token, self._pw).to_bytes()
@@ -173,7 +173,7 @@ class GhostCloak:
         if flag == 1:
             import base64
 
-            from rabbitghost.crypto import EncryptedBlob, decrypt
+            from ghosted.crypto import EncryptedBlob, decrypt
 
             token = decrypt(EncryptedBlob.from_bytes(data), self._pw or "")
             return base64.b64decode(token)

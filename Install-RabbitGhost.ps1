@@ -143,7 +143,7 @@ if ($Uninstall) {
 
 if (-not $sys.isWindows) {
     Write-Error "The bundled $Exe is a Windows executable; this host is not Windows. " +
-    "Run from source instead: PYTHONPATH=src python -m rabbitghost.console"
+    "Run from source instead: PYTHONPATH=src python -m ghosted.console"
     exit 2
 }
 
@@ -185,7 +185,7 @@ if ($PSCmdlet.ShouldProcess($dest, "Copy bundle + create shortcuts")) {
         Write-Warning (
             "Smart App Control / WDAC is '$($sys.appControl)' on this host — it may block the " +
             "unsigned RabbitGhost.exe. If launching is blocked, either code-sign the bundle, or " +
-            "run from source: `$env:PYTHONPATH='<repo>\src;<rabbit-tree>'; python -m rabbitghost.console"
+            "run from source: `$env:PYTHONPATH='<repo>\src;<rabbit-tree>'; python -m ghosted.console"
         )
     }
 }

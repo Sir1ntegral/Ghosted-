@@ -29,13 +29,13 @@ $tmp = "$repo\.build-tmp"; New-Item -ItemType Directory -Force $tmp | Out-Null
 $env:TMP = $tmp; $env:TEMP = $tmp
 
 $icon = "$repo\assets\ghost_rabbit.ico"
-$model = "$repo\src\rabbitghost\data\semantic_model.json"
+$model = "$repo\src\ghosted\data\semantic_model.json"
 
 $args = @(
     "--noconfirm", "--clean", "--onedir", "--name", "RabbitGhost",
     "--icon", $icon,
     "--paths", "$repo\src", "--paths", $RabbitHome,
-    "--collect-submodules", "rabbitghost", "--collect-data", "rabbitghost",
+    "--collect-submodules", "ghosted", "--collect-data", "ghosted",
     "--collect-submodules", "rabbit.security.ghost",
     "--hidden-import", "rabbit.research.sovereign_browser_engine",
     "--hidden-import", "rabbit.network.sovereign_wireguard",
@@ -48,7 +48,7 @@ $args = @(
 )
 # Belt-and-suspenders: explicitly ship the trained model + the icon as data so the
 # packaged app keeps meaning-ranking and the shortcut icon even if collect-data misses.
-if (Test-Path $model) { $args += @("--add-data", "$model;rabbitghost/data") }
+if (Test-Path $model) { $args += @("--add-data", "$model;ghosted/data") }
 if (Test-Path $icon) { $args += @("--add-data", "$icon;.") }
 
 # Heavy modules never needed by RabbitGhost — always excluded.
@@ -64,7 +64,7 @@ foreach ($m in $alwaysExclude) { $args += @("--exclude-module", $m) }
 
 $args += @(
     "--distpath", "$repo\dist", "--workpath", "$repo\build", "--specpath", "$repo",
-    "$repo\src\rabbitghost\console.py"
+    "$repo\src\ghosted\console.py"
 )
 
 python -m PyInstaller @args

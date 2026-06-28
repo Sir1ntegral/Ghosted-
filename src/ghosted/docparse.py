@@ -90,7 +90,7 @@ class Maw:
         elif ext == ".json":
             text = _json(path)
         elif ext in (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".gif"):
-            from rabbitghost.ocr import OCR
+            from ghosted.ocr import OCR
 
             text = OCR().extract(path)
         else:

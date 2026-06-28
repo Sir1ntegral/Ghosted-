@@ -1,5 +1,5 @@
 """
-Help — one place that accounts for EVERYTHING RabbitGhost does.
+Help — one place that accounts for EVERYTHING Ghosted does.
 
 HELP is the single source of truth for every command + capability. The console `help`
 command and the homepage /help page both render from here, so there's never drift
@@ -173,7 +173,7 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
 }
 
 CAPABILITIES = (
-    "RabbitGhost also runs a sovereign Google-like homepage (search + meaning-ranking + tabs + "
+    "Ghosted also runs a sovereign Google-like homepage (search + meaning-ranking + tabs + "
     "private on-device history/favorites + a Lola read-aloud button + a Gojo-gated login for remote "
     "access over the mesh), a black-box mail system (@sovereign.dmn end-to-end + real mesh delivery + "
     "opt-in IMAP/POP receive + external SMTP send), and a WireGuard key vault — all sovereign, hardened, "
@@ -182,7 +182,7 @@ CAPABILITIES = (
 
 
 def overview() -> str:
-    lines = ["RabbitGhost — everything it does:\n"]
+    lines = ["Ghosted — everything it does:\n"]
     for cat, items in HELP.items():
         lines.append(f"  {cat}")
         for cmd, summary, _detail in items:

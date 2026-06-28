@@ -1,10 +1,10 @@
-"""Train the RabbitGhost semantic meaning-vectors from a text corpus.
+"""Train the Ghosted semantic meaning-vectors from a text corpus.
 
 Usage:  python tools/train_semantic.py [RABBIT_HOME]
 
 Reads canon/doc prose from the Rabbit mind, trains a SovereignSemanticModel
 (PPMI+SVD+SIF, sovereign — no external embeddings), and saves it to
-src/rabbitghost/data/semantic_model.json so the homepage search ranks by meaning.
+src/ghosted/data/semantic_model.json so the homepage search ranks by meaning.
 Needs numpy + the rabbit mind importable. Re-run to refresh on a new corpus.
 """
 import os
@@ -40,7 +40,7 @@ def main() -> int:
         print("training failed (numpy missing?)")
         return 1
 
-    out = os.path.join(os.path.dirname(__file__), "..", "src", "rabbitghost", "data", "semantic_model.json")
+    out = os.path.join(os.path.dirname(__file__), "..", "src", "ghosted", "data", "semantic_model.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     m.save(out)
     print(f"trained vocab={m.vocab_size} -> {out} ({os.path.getsize(out) / 1e6:.1f} MB)")

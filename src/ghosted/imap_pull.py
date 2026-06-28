@@ -16,7 +16,7 @@ import imaplib
 import poplib
 import ssl
 
-from rabbitghost import mail
+from ghosted import mail
 
 _TIMEOUT = 30  # never hang the calling thread on a dead/slow provider
 

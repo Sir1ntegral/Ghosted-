@@ -11,7 +11,7 @@ pytest.importorskip(
     "rabbit.core.crypto", reason="requires the rabbit mind on PYTHONPATH"
 )
 
-from rabbitghost.console import handle_command  # noqa: E402
+from ghosted.console import handle_command  # noqa: E402
 
 
 class FakeGhost:
@@ -96,7 +96,7 @@ def test_network_requires_login():
 
 def test_network_builds_sealed_mesh(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import vault
+    from ghosted import vault
 
     vault.initialize("MeshMasterKey1")
     _, out, _ = run(
@@ -177,7 +177,7 @@ def test_commands_tolerate_missing_ghost():
 
 # ── Tier 2: store-and-forward flush + mesh actuation + password rotation ──────
 def test_flush_offline(monkeypatch):
-    monkeypatch.setattr("rabbitghost.transport.online", lambda *a, **k: False)
+    monkeypatch.setattr("ghosted.transport.online", lambda *a, **k: False)
     _, out, _ = run("flush")
     assert out[0] == {"online": False}
 
@@ -196,7 +196,7 @@ def test_mesh_export_requires_mesh(tmp_path, monkeypatch):
 
 def test_mesh_export_writes_confs(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import vault
+    from ghosted import vault
 
     vault.initialize("MeshExportKey1")
     vault.build_and_seal_mesh(
@@ -217,7 +217,7 @@ def test_passwd_requires_vault(tmp_path, monkeypatch):
 
 def test_passwd_rotates(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import vault
+    from ghosted import vault
 
     vault.initialize("OldMasterKey12")
     _, out, _ = run(

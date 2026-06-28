@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 import socket
 
-from rabbitghost import transport
+from ghosted import transport
 
 
 def interfaces() -> list[str]:
@@ -60,7 +60,7 @@ def sovereign_get(url: str, *, timeout: float = 15.0) -> dict:
     default + clearnet fallback). If utterly offline, spool the intent for
     store-and-forward and report it — never a hard failure."""
     try:
-        from rabbitghost.http import sovereign_http_get
+        from ghosted.http import sovereign_http_get
 
         r = sovereign_http_get(
             url, connect_timeout=int(timeout), read_timeout=int(timeout)
@@ -80,7 +80,7 @@ def flush_fetch() -> dict:
 
     def _send(payload: dict) -> bool:
         try:
-            from rabbitghost.http import sovereign_http_get
+            from ghosted.http import sovereign_http_get
 
             r = sovereign_http_get(payload["url"], connect_timeout=15, read_timeout=15)
             return bool(getattr(r, "success", False))

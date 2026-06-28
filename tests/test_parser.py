@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import parser  # noqa: E402
+from ghosted import parser  # noqa: E402
 
 
 def test_parse_text_json():

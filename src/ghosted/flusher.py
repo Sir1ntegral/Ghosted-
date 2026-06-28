@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import threading
 
-from rabbitghost import connectivity, mesh_mail, transport
+from ghosted import connectivity, mesh_mail, transport
 
 
 def flush_all() -> dict:
@@ -47,7 +47,7 @@ def start_autoflush(interval: float = 30.0) -> bool:
                     pass  # a flush must never kill the daemon
 
         _AUTO_THREAD = threading.Thread(
-            target=_loop, name="rabbitghost-autoflush", daemon=True
+            target=_loop, name="ghosted-autoflush", daemon=True
         )
         _AUTO_THREAD.start()
         return True

@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rabbitghost"
+name = "ghosted"
 version = "0.1.0"
 description = "Sovereign stealth console + Google-like homepage + semantic search — a standalone tool."
 readme = "README.md"
@@ -29,8 +29,8 @@ build = ["pyinstaller"]
 dev = ["pytest"]
 
 [project.scripts]
-rabbitghost = "rabbitghost.console:menu"
-rabbitghost-home = "rabbitghost.homepage:serve"
+ghosted = "ghosted.console:menu"
+ghosted-home = "ghosted.homepage:serve"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,4 +38,4 @@ where = ["src"]
 [tool.setuptools.package-data]
 # Ship the trained semantic model with `pip install .` (src-layout would drop it
 # otherwise — the audit's "model never ships" bug). PyInstaller bundles it via build.ps1.
-rabbitghost = ["data/*.json"]
+ghosted = ["data/*.json"]

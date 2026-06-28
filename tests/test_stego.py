@@ -12,7 +12,7 @@ pytest.importorskip("PIL")
 def test_stego_blackbox_roundtrip(tmp_path):
     from PIL import Image
 
-    from rabbitghost.ghost import GhostCloak
+    from ghosted.ghost import GhostCloak
 
     carrier = str(tmp_path / "carrier.png")
     out = str(tmp_path / "out.png")

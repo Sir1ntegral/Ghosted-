@@ -23,7 +23,7 @@ def _free_port():
 
 def test_smtp_inbox_blackboxes_inbound(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import mail, smtp_inbox
+    from ghosted import mail, smtp_inbox
 
     port = _free_port()
     threading.Thread(
@@ -50,7 +50,7 @@ def test_smtp_inbox_blackboxes_inbound(tmp_path, monkeypatch):
 
 def test_imap_pull_blackboxes(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    from rabbitghost import imap_pull, mail
+    from ghosted import imap_pull, mail
 
     class FakeIMAP:
         def __init__(self, host, port):

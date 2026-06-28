@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import bridge  # noqa: E402
+from ghosted import bridge  # noqa: E402
 
 
 def test_send_external_builds_and_relays(monkeypatch):

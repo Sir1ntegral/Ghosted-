@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from rabbitghost import mail  # noqa: E402
+from ghosted import mail  # noqa: E402
 
 
 def test_sovereign_suggested_first(tmp_path, monkeypatch):

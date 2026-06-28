@@ -1,5 +1,5 @@
 """
-Vault + app login — a RABBIT-KDF passphrase gate for RabbitGhost.
+Vault + app login — a RABBIT-KDF passphrase gate for Ghosted.
 
 App login
     A single master passphrase. We store only a *verifier* — an encrypted sentinel,
@@ -22,7 +22,7 @@ import json
 import os
 from typing import Any
 
-_SENTINEL = "rabbitghost-vault-ok-v1"
+_SENTINEL = "ghosted-vault-ok-v1"
 
 
 def _vault_dir() -> str:
@@ -41,14 +41,14 @@ def _mesh_path() -> str:
 
 
 def _seal(obj: Any, passphrase: str) -> str:
-    from rabbitghost.crypto import encrypt
+    from ghosted.crypto import encrypt
 
     blob = encrypt(json.dumps(obj, ensure_ascii=False), passphrase)
     return base64.b64encode(blob.to_bytes()).decode()
 
 
 def _unseal(token: str, passphrase: str) -> Any:
-    from rabbitghost.crypto import EncryptedBlob, decrypt
+    from ghosted.crypto import EncryptedBlob, decrypt
 
     blob = EncryptedBlob.from_bytes(base64.b64decode(token))
     return json.loads(decrypt(blob, passphrase))
@@ -129,7 +129,7 @@ def build_and_seal_mesh(
     and seal every config at rest behind the master password. Returns device names."""
     if not login(passphrase):
         raise PermissionError("vault locked: log in first")
-    from rabbitghost.wireguard import PackMesh
+    from ghosted.wireguard import PackMesh
 
     mesh = PackMesh(hub=hub)
     for name, endpoint in devices:

@@ -98,7 +98,7 @@ def _semantic_model():
     try:
         import os
 
-        from rabbitghost._sovereign_semantic import SovereignSemanticModel
+        from ghosted._sovereign_semantic import SovereignSemanticModel
 
         path = os.path.join(os.path.dirname(__file__), "data", "semantic_model.json")
         m = SovereignSemanticModel.load(path)
