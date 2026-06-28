@@ -40,7 +40,7 @@ python -m ghosted.homepage       # http://127.0.0.1:7654
 ## Build the exe
 
 ```powershell
-./build.ps1            # produces dist/RabbitGhost/ (onedir, ghost-rabbit icon)
+./build.ps1            # produces dist/Ghosted/ (onedir, ghost-rabbit icon)
 ```
 
 ## Security note
