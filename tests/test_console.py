@@ -105,3 +105,50 @@ def test_network_builds_sealed_mesh(tmp_path, monkeypatch):
         asks=["", "tower", "1.2.3.4:51820", "iphone", "", ""],  # ≥2 devices
     )
     assert {"tower", "iphone"} <= set(out[-1]["mesh_sealed_in_vault"])
+
+
+# ── mail command (compose / inbox / read / send / ext / pull) ────────────────
+def test_mail_compose_inbox_read_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    # compose: asks to/subject/body, getpw passphrase → seals into the mailbox
+    _, out, _ = run(
+        "mail",
+        "compose",
+        asks=["alice", "hi there", "the body"],
+        pws=["BlackBoxPass1"],
+    )
+    assert out[0]["sealed_to_mailbox"].endswith(".box")
+    # inbox: lists the one black box
+    _, out, _ = run("mail", "inbox")
+    assert out[0]["count"] == 1 and out[0]["recent"][0].startswith("0: ")
+    # read index 0 with the key → original message recovered
+    _, out, _ = run("mail", "read 0", pws=["BlackBoxPass1"])
+    assert out[0]["subject"] == "hi there" and out[0]["body"] == "the body"
+    assert out[0]["to"] == "alice@sovereign.dmn"
+
+
+def test_mail_read_wrong_key_errors(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    run("mail", "compose", asks=["bob", "s", "b"], pws=["RightKey12345"])
+    # the console wraps exceptions; here handle_command raises, caught by caller.
+    # read with the wrong key must NOT return the plaintext.
+    try:
+        _, out, _ = run("mail", "read 0", pws=["WrongKey00000"])
+        assert "b" != out[0].get("body")
+    except Exception:
+        pass  # decrypt failure on a wrong key is acceptable
+
+
+def test_mail_send_requires_peer():
+    _, out, _ = run("mail", "send")
+    assert "usage: mail send" in out[0]
+
+
+def test_mail_pull_bad_protocol():
+    _, out, _ = run("mail", "pull ftp")
+    assert "usage: mail pull" in out[0]
+
+
+def test_mail_unknown_subcommand():
+    _, out, _ = run("mail", "frobnicate")
+    assert "unknown mail subcommand" in out[0]

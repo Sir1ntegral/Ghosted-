@@ -13,6 +13,7 @@ only from Lucy's own desktop icon. Defensive/research use on Lucy's own device.
 from __future__ import annotations
 
 import getpass
+import os
 import sys
 import textwrap
 
@@ -67,6 +68,7 @@ def menu() -> None:
           hotspot           start a WiFi hotspot for the mesh (Windows, needs admin)
           contacts          list saved contacts
           filters           list mail filter rules
+          mail [sub]        black-box mail: inbox|read|compose|send <peer>|ext|pull <imap|pop>
           mailsearch <q>    search your black-box mail (needs passphrase)
           spool             store-and-forward outbox: pending count + online status
           identity [add|rm <email>]  use your own email (any kind, no IMAP/POP); @sovereign.dmn first
@@ -217,6 +219,88 @@ def handle_command(
         from rabbitghost import mail_filters
 
         out({"filters": mail_filters.filters()})
+    elif cmd == "mail":
+        from rabbitghost import bridge, imap_pull, mail, mesh_mail
+
+        sub, _, arg = rest.partition(" ")
+        sub = sub.strip().lower()
+        if sub in ("", "inbox", "list"):
+            boxes = mail.inbox()
+            out(
+                {
+                    "count": len(boxes),
+                    "recent": [
+                        f"{i}: {os.path.basename(p)}" for i, p in enumerate(boxes[-10:])
+                    ],
+                    "note": "mail read <index|path> (needs passphrase)",
+                }
+            )
+        elif sub == "read":
+            boxes = mail.inbox()
+            a = arg.strip()
+            target = boxes[int(a)] if a.isdigit() and int(a) < len(boxes) else a
+            if not target:
+                out("usage: mail read <index|path>")
+                return True
+            out(mail.read(target, getpw("passphrase: ")))
+        elif sub == "compose":  # seal into the local black-box mailbox
+            to = ask("to: ").strip()
+            subject = ask("subject: ").strip()
+            body = ask("body: ")
+            out(
+                {
+                    "sealed_to_mailbox": mail.send(
+                        to, subject, body, getpw("passphrase: ")
+                    )
+                }
+            )
+        elif (
+            sub == "send"
+        ):  # deliver over the WireGuard mesh to a peer (spool if offline)
+            peer = arg.strip()
+            if not peer:
+                out("usage: mail send <peer-host>")
+                return True
+            to = ask("to: ").strip()
+            subject = ask("subject: ").strip()
+            body = ask("body: ")
+            out(mesh_mail.send_to(peer, to, subject, body, getpw("passphrase: ")))
+        elif sub == "ext":  # external SMTP submission — leaves the sovereign envelope
+            to = ask("to: ").strip()
+            subject = ask("subject: ").strip()
+            body = ask("body: ")
+            from_addr = ask("from (your address): ").strip()
+            host = ask("smtp host: ").strip()
+            port = ask("smtp port [587]: ").strip() or "587"
+            user = ask("username (blank if none): ").strip() or None
+            pw = getpw("smtp password (blank if none): ") or None
+            out(
+                bridge.send_external(
+                    to,
+                    subject,
+                    body,
+                    from_addr=from_addr,
+                    smtp_host=host,
+                    smtp_port=int(port),
+                    username=user,
+                    password=pw,
+                )
+            )
+        elif sub == "pull":  # opt-in IMAP/POP receive → black-boxed at rest
+            proto = arg.strip().lower()
+            if proto not in ("imap", "pop"):
+                out("usage: mail pull <imap|pop>")
+                return True
+            host = ask("host: ").strip()
+            default_port = "993" if proto == "imap" else "995"
+            port = ask(f"port [{default_port}]: ").strip() or default_port
+            user = ask("username: ").strip()
+            pw = getpw("account password: ")
+            key = getpw("black-box passphrase (seals fetched mail at rest): ")
+            fn = imap_pull.pull_imap if proto == "imap" else imap_pull.pull_pop
+            out(fn(host, user, pw, key, port=int(port)))
+        else:
+            out(f"unknown mail subcommand: {sub} (inbox|read|compose|send|ext|pull)")
     elif cmd == "mailsearch":
         from rabbitghost import mail
 

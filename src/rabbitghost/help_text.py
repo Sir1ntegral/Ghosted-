@@ -83,8 +83,19 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
     ],
     "Mail": [
         (
+            "mail [sub]",
+            "black-box mail: inbox / read / compose / send / ext / pull",
+            "One command for the whole mailbox. 'mail' or 'mail inbox' lists black boxes; "
+            "'mail read <index|path>' opens one with your passphrase; 'mail compose' seals a "
+            "message into your local mailbox; 'mail send <peer-host>' delivers a sealed @sovereign.dmn "
+            "black box to a peer over the WireGuard mesh (spooled if the peer is offline); "
+            "'mail ext' relays one message via external SMTP submission (leaves the sovereign "
+            "envelope; credentials used for that call only, never stored); 'mail pull <imap|pop>' "
+            "opt-in fetches an external inbox over verified TLS and black-boxes each message at rest.",
+        ),
+        (
             "identity [add|rm <email>]",
-            "use your own email (no IMAP/POP)",
+            "use your own email (no IMAP/POP by default)",
             "Register your own address of any provider as an identity only — never logs into an inbox. "
             "@sovereign.dmn is always suggested first.",
         ),
