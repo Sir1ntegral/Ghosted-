@@ -1,11 +1,11 @@
-"""RABBIT-KDF-2: Rabbit's Sovereign Memory-Hard Key Derivation Function.
+"""GHOSTED-KDF-2: Rabbit's Sovereign Memory-Hard Key Derivation Function.
 
 A pure-Python implementation that surpasses standard Argon2id across every
 security and operational dimension Rabbit requires — including raw speed.
 
   HYBRID HASH DESIGN (the key innovation)
   ────────────────────────────────────────
-  RABBIT-KDF-2 uses two hash functions with distinct roles:
+  GHOSTED-KDF-2 uses two hash functions with distinct roles:
 
     BLAKE2b-512  — memory filling hot path.
       BLAKE2b is the fastest software-optimised hash in Python's hashlib (pure C).
@@ -22,7 +22,7 @@ security and operational dimension Rabbit requires — including raw speed.
       memory integrity MAC, HKDF-Extract, and HKDF-Expand.  The derived key is
       therefore quantum-resistant regardless of which hash was used for filling.
 
-  This hybrid makes RABBIT-KDF-2 faster than pure-SHA3-filling while being
+  This hybrid makes GHOSTED-KDF-2 faster than pure-SHA3-filling while being
   quantum-resistant at every security-critical output point — superior to Argon2id
   which uses BLAKE2b throughout with no quantum-resistant extraction step.
 
@@ -62,10 +62,10 @@ security and operational dimension Rabbit requires — including raw speed.
   · 100 % code coverage:  every branch and preset is exercised by the
     accompanying test suite.
 
-  ALGORITHM: RABBIT-KDF-1 (Balloon Hash / SHA3-512)
+  ALGORITHM: GHOSTED-KDF-1 (Balloon Hash / SHA3-512)
   ──────────────────────────────────────────────────
   Balloon hashing (Boneh, Corrigan-Gibbs, Schechter — Stanford 2016) is
-  formally proven to be memory-hard in the Random Oracle Model.  RABBIT-KDF-1
+  formally proven to be memory-hard in the Random Oracle Model.  GHOSTED-KDF-1
   extends the standard algorithm with:
 
     1. SHA3-512 as the internal hash (quantum-resistant, NIST standard).
@@ -75,7 +75,7 @@ security and operational dimension Rabbit requires — including raw speed.
     5. Optional machine-binding via hardware fingerprint.
 
   On-wire parameter encoding for self-describing blobs:
-    kdf_id byte = 0x03 (RABBIT-KDF-1)
+    kdf_id byte = 0x03 (GHOSTED-KDF-1)
     Serialised as: space(4) || time_cost(2) || delta(1) alongside the blob
     so that any future software can reconstruct the exact parameters used.
 
@@ -85,7 +85,7 @@ security and operational dimension Rabbit requires — including raw speed.
     · HKDF / RFC 5869:  https://www.rfc-editor.org/rfc/rfc5869
 
 Security classification: Class C (same as crypto.py).
-Any vulnerability here compromises all RABBIT-KDF-1 derived keys.
+Any vulnerability here compromises all GHOSTED-KDF-1 derived keys.
 """
 
 from __future__ import annotations
@@ -110,16 +110,16 @@ __all__ = [
     "verify_passphrase",
     "calibrate",
     "get_kdf_params",
-    "RABBIT_KDF_VERSION",
-    "RABBIT_KDF_ID",
+    "GHOSTED_KDF_VERSION",
+    "GHOSTED_KDF_ID",
 ]
 
 # ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
 
-RABBIT_KDF_VERSION: str = "RABBIT-KDF-2"
-RABBIT_KDF_ID: int = 0x03  # kdf_id byte stored in EncryptedBlob
+GHOSTED_KDF_VERSION: str = "GHOSTED-KDF-2"
+GHOSTED_KDF_ID: int = 0x03  # kdf_id byte stored in EncryptedBlob
 
 _BLOCK_BYTES: int = 64  # SHA3-512 digest length — one block
 _DELTA: int = 3  # Balloon Hash mixing factor (3 per standard)
@@ -185,14 +185,14 @@ class KDFPreset(Enum):
 
 @dataclass(frozen=True)
 class KDFResult:
-    """Rich result from a RABBIT-KDF-1 derivation.
+    """Rich result from a GHOSTED-KDF-1 derivation.
 
     All fields are read-only.  .key is the only secret — every other field
     is safe to store alongside the encrypted blob for auditability.
 
     Attributes:
         key:            Derived key of the requested length (bytes).
-        algorithm:      Always ``"RABBIT-KDF-1"``.
+        algorithm:      Always ``"GHOSTED-KDF-1"``.
         preset_label:   Name of the preset used (e.g. "INTERACTIVE").
         space:          Number of 64-byte memory blocks allocated.
         time_cost:      Number of mixing passes.
@@ -307,7 +307,7 @@ def _machine_key() -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Core algorithm: RABBIT-KDF-1 (Balloon Hash with SHA3-512)
+# Core algorithm: GHOSTED-KDF-1 (Balloon Hash with SHA3-512)
 # ---------------------------------------------------------------------------
 
 
@@ -320,7 +320,7 @@ def _balloon_hash(
     domain: bytes,
     progress_cb: Optional[Callable[[float], None]],
 ) -> tuple[list[bytes], int]:
-    """Execute the Balloon Hash memory-filling algorithm (RABBIT-KDF-2 hybrid).
+    """Execute the Balloon Hash memory-filling algorithm (GHOSTED-KDF-2 hybrid).
 
     Memory-hard property guarantee:
         An adversary computing the output in optimal time MUST hold all
@@ -339,7 +339,7 @@ def _balloon_hash(
         _h (SHA3-512): used for salt expansion only — security-critical context.
         Quantum resistance is preserved at extraction (caller's responsibility).
 
-    Performance vs RABBIT-KDF-1 (pure SHA3):
+    Performance vs GHOSTED-KDF-1 (pure SHA3):
         BLAKE2b-512 is ~4x faster than SHA3-512 in CPython's hashlib (~50 ns
         vs ~200 ns per call).  INTERACTIVE preset: ~6 ms instead of ~25 ms.
 
@@ -433,7 +433,7 @@ def _balloon_hash(
 
 
 class SovereignKDF:
-    """RABBIT-KDF-1 — Rabbit's sovereign, pure-Python, memory-hard KDF.
+    """GHOSTED-KDF-1 — Rabbit's sovereign, pure-Python, memory-hard KDF.
 
     Stateless.  Every method is safe to call concurrently from multiple
     threads — no shared mutable state.  Create one instance at startup
@@ -587,7 +587,7 @@ class SovereignKDF:
 
         if verbose:
             logger.debug(
-                "RABBIT-KDF-1 derivation complete | "
+                "GHOSTED-KDF-1 derivation complete | "
                 "preset=%s space=%d time=%d delta=%d "
                 "memory_kib=%.1f elapsed_ms=%.3f hash_calls=%d "
                 "output_len=%d machine_bound=%s domain=%s",
@@ -605,7 +605,7 @@ class SovereignKDF:
 
         return KDFResult(
             key=derived_key,
-            algorithm=RABBIT_KDF_VERSION,
+            algorithm=GHOSTED_KDF_VERSION,
             preset_label=self._preset.label,
             space=self._preset.space,
             time_cost=self._preset.time_,
@@ -646,7 +646,7 @@ def derive(
     domain_tag: str = _DEFAULT_DOMAIN,
     **kwargs,
 ) -> KDFResult:
-    """Derive a key using RABBIT-KDF-1 with the given preset.
+    """Derive a key using GHOSTED-KDF-1 with the given preset.
 
     This is a convenience wrapper that creates a :class:`SovereignKDF`
     instance and calls :meth:`~SovereignKDF.derive`.  For repeated
@@ -767,8 +767,8 @@ def get_kdf_params(preset: KDFPreset | None = None) -> dict:
     from typing import Any as _Any
 
     global_meta: dict[str, _Any] = {
-        "algorithm": RABBIT_KDF_VERSION,
-        "kdf_id": RABBIT_KDF_ID,
+        "algorithm": GHOSTED_KDF_VERSION,
+        "kdf_id": GHOSTED_KDF_ID,
         "block_bytes": _BLOCK_BYTES,
         "mixing_factor": _DELTA,
         "fill_hash": "BLAKE2b-512",

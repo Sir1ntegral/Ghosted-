@@ -5,7 +5,7 @@ Strategy (no duplication, graceful):
   * files → Rabbit's Maw (MediaExtractor: pdf / docx / html / csv / json / txt / md)
     when the mind is importable; otherwise a pure-stdlib fallback for the lightweight
     formats (json / csv / html / text) with zero extra deps.
-  * images → RABBIT-OCR-1 (rabbit.perception.sovereign_ocr) when available.
+  * images → OCR (rapidocr/pytesseract) when available.
   * strings → format sniffing (json → csv → html → plain).
 
 Every entry point returns a dict: {"type", "text", ... , optional "data"/"rows"}.

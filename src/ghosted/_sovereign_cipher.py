@@ -1,4 +1,4 @@
-"""RABBIT-CIPHER-1: Rabbit's Sovereign ChaCha20-Poly1305 AEAD Implementation.
+"""GHOSTED-CIPHER-1: Rabbit's Sovereign ChaCha20-Poly1305 AEAD Implementation.
 
 Pure Python, zero external dependencies, verified against RFC 8439 test vectors.
 
@@ -47,7 +47,7 @@ Pure Python, zero external dependencies, verified against RFC 8439 test vectors.
   Test vector compliance: RFC 8439 §2.1.1, §2.2.2, §2.3.2, §2.5.2, §2.6.2, §2.8.2.
 
 Security classification: Class C.
-A bug in this module compromises all RABBIT-CIPHER-1 encrypted blobs.
+A bug in this module compromises all GHOSTED-CIPHER-1 encrypted blobs.
 Protections:
     · MAC verified BEFORE any plaintext bytes are returned (encrypt-then-MAC).
     · Constant-time tag comparison via hmac.compare_digest().
@@ -72,14 +72,14 @@ __all__ = [
     "CIPHER_KEY_LEN",
     "CIPHER_NONCE_LEN",
     "CIPHER_TAG_LEN",
-    "RABBIT_CIPHER_VERSION",
+    "GHOSTED_CIPHER_VERSION",
 ]
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-RABBIT_CIPHER_VERSION: str = "RABBIT-CIPHER-1"
+GHOSTED_CIPHER_VERSION: str = "GHOSTED-CIPHER-1"
 CIPHER_KEY_LEN: int = 32  # 256-bit key
 CIPHER_NONCE_LEN: int = 12  # 96-bit nonce (IETF standard)
 CIPHER_TAG_LEN: int = 16  # 128-bit authentication tag
@@ -365,7 +365,7 @@ class SovereignChaCha20Poly1305:
         tag: bytes = _poly1305_mac(otk, mac_data)
 
         logger.debug(
-            "RABBIT-CIPHER-1 encrypt: %d bytes plaintext → %d bytes output",
+            "GHOSTED-CIPHER-1 encrypt: %d bytes plaintext → %d bytes output",
             len(data),
             len(ciphertext) + CIPHER_TAG_LEN,
         )
@@ -419,7 +419,7 @@ class SovereignChaCha20Poly1305:
 
         # Constant-time comparison — prevents timing oracle attacks
         if not hmac.compare_digest(expected_tag, received_tag):
-            logger.warning("RABBIT-CIPHER-1 decrypt: authentication tag mismatch")
+            logger.warning("GHOSTED-CIPHER-1 decrypt: authentication tag mismatch")
             raise SovereignAuthenticationError(
                 "Decryption failed. The authentication tag is invalid — "
                 "the key, nonce, AAD, or ciphertext may be incorrect or tampered."
@@ -428,7 +428,7 @@ class SovereignChaCha20Poly1305:
         plaintext: bytes = _chacha20_encrypt(self._key, nonce, 1, ciphertext)
 
         logger.debug(
-            "RABBIT-CIPHER-1 decrypt: %d bytes ciphertext → %d bytes plaintext",
+            "GHOSTED-CIPHER-1 decrypt: %d bytes ciphertext → %d bytes plaintext",
             len(ciphertext),
             len(plaintext),
         )

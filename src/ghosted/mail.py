@@ -1,7 +1,7 @@
 """
 Sovereign black-box mail (Layer A: Rabbit ↔ Rabbit).
 
-Every message is a RABBIT-CIPHER-1 ciphertext at rest and on the wire. To anyone
+Every message is a GHOSTED-CIPHER-1 ciphertext at rest and on the wire. To anyone
 without the key — disk, network, a server, a thief — each message is an
 indistinguishable **black box**: no subject, no sender, no body, just opaque bytes.
 Only a holder of the passphrase/key opens it. End-to-end private, zero external
@@ -26,7 +26,7 @@ from typing import Any
 
 # Rabbit's sovereign email domain — used for mesh (Layer A) addressing. This is an
 # internal/sovereign domain (no public DNS, no registration): every sovereign.dmn
-# message is a RABBIT-CIPHER-1 black box delivered peer-to-peer over WireGuard.
+# message is a GHOSTED-CIPHER-1 black box delivered peer-to-peer over WireGuard.
 # Functional EXTERNAL mail (e.g. GitHub verifications) would need a registered
 # public-TLD domain + MX records — .dmn cannot receive internet email (see #16).
 DOMAIN = "sovereign.dmn"
@@ -48,7 +48,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 def _data_root() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "RabbitGhost")
+    d = os.path.join(base, "Ghosted")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -124,13 +124,13 @@ def identities() -> list:
 
 def _mailbox_dir() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "RabbitGhost", "mail")
+    d = os.path.join(base, "Ghosted", "mail")
     os.makedirs(d, exist_ok=True)
     return d
 
 
 def _seal(obj: dict, passphrase: str) -> str:
-    """Serialise + RABBIT-CIPHER-1 encrypt → opaque base64 token (the black box)."""
+    """Serialise + GHOSTED-CIPHER-1 encrypt → opaque base64 token (the black box)."""
     from ghosted.crypto import encrypt
 
     blob = encrypt(json.dumps(obj, ensure_ascii=False), passphrase)

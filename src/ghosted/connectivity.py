@@ -90,7 +90,7 @@ def flush_fetch() -> dict:
     return sp.flush(_send)
 
 
-def start_hotspot(ssid: str = "RabbitMesh", password: str = "rabbitmesh1234") -> dict:
+def start_hotspot(ssid: str = "GhostedMesh", password: str = "ghostedmesh1234") -> dict:
     """Stand up a WiFi hotspot so peers join + the mesh runs over it (Windows netsh).
     Needs admin + a hosted-network-capable adapter; reports the outcome, never crashes.
     """

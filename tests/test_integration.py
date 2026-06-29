@@ -63,7 +63,7 @@ def test_boot_all_modules_import():
 def test_home_route_and_security_headers():
     r, body = _get("/")
     assert r.status == 200
-    assert "Rabbit Search" in body
+    assert "Ghosted Search" in body
     assert r.getheader("X-Content-Type-Options") == "nosniff"
     assert r.getheader("X-Frame-Options") == "DENY"
     assert r.getheader("Referrer-Policy") == "no-referrer"

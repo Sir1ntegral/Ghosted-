@@ -27,7 +27,7 @@ def test_login_and_wireguard_vault(tmp_path, monkeypatch):
     assert set(names) == {"tower", "iphone"}
 
     # sealed opaque at rest — no key material readable
-    raw = open(os.path.join(str(tmp_path), "RabbitGhost", "vault", "mesh.box")).read()
+    raw = open(os.path.join(str(tmp_path), "Ghosted", "vault", "mesh.box")).read()
     assert "PrivateKey" not in raw and "[Interface]" not in raw
 
     cfgs = v.unseal_mesh("CorrectHorse42")

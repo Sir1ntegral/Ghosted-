@@ -1,18 +1,18 @@
 """
-Vault + app login — a RABBIT-KDF passphrase gate for Ghosted.
+Vault + app login — a GHOSTED-KDF passphrase gate for Ghosted.
 
 App login
     A single master passphrase. We store only a *verifier* — an encrypted sentinel,
     never the password itself. ``login(pw)`` succeeds iff ``pw`` opens the sentinel
-    (RABBIT-CIPHER-1 AEAD auth makes a wrong password fail closed).
+    (GHOSTED-CIPHER-1 AEAD auth makes a wrong password fail closed).
 
 WireGuard vault
     The PackMesh private keys + per-device configs are sealed AT REST with the master
-    passphrase (RABBIT-CIPHER-1). To anyone without it the vault is a black box; the
+    passphrase (GHOSTED-CIPHER-1). To anyone without it the vault is a black box; the
     mesh can only be brought up after ``unseal_mesh(pw)``. Underneath, every link
     still carries its own clamped key + symmetric PSK (consistent auth, task #14).
 
-All crypto is Rabbit's own: RABBIT-KDF-1 (passphrase → key) + RABBIT-CIPHER-1.
+All crypto is Rabbit's own: GHOSTED-KDF-1 (passphrase → key) + GHOSTED-CIPHER-1.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ _SENTINEL = "ghosted-vault-ok-v1"
 
 def _vault_dir() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "RabbitGhost", "vault")
+    d = os.path.join(base, "Ghosted", "vault")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -102,7 +102,7 @@ def has_mesh() -> bool:
 
 def _write_mesh(configs: dict, passphrase: str) -> None:
     """Seal + write the mesh vault (no login check — callers that already verified the
-    passphrase use this to avoid a redundant RABBIT-KDF pass)."""
+    passphrase use this to avoid a redundant GHOSTED-KDF pass)."""
     with open(_mesh_path(), "w", encoding="ascii") as fh:
         fh.write(_seal(configs, passphrase))
 

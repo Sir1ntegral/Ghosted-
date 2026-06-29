@@ -2,7 +2,7 @@
 Sovereign SMTP receiver — accept inbound external mail and BLACK-BOX it at rest.
 
 Run on a (free) publicly-reachable host so MX-routed internet mail lands sealed.
-Pure-stdlib socket SMTP — no deps. Every message is sealed with RABBIT-CIPHER-1 the
+Pure-stdlib socket SMTP — no deps. Every message is sealed with GHOSTED-CIPHER-1 the
 instant it arrives (mail.seal_inbound), so it never sits readable. NO IMAP/POP: the
 laptop pulls the sealed boxes over WireGuard.
 
@@ -10,7 +10,7 @@ Hardened: bounded DATA buffering, per-line caps, socket timeout, bounded concurr
 fail-CLOSED on seal failure (451 retry, never a false ACK), and it refuses to start
 without an explicit key (no inbound mail sealed under a shared default).
 
-    RABBIT_INBOX_KEY=yourkey python -m ghosted.smtp_inbox 25
+    GHOSTED_INBOX_KEY=yourkey python -m ghosted.smtp_inbox 25
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import threading
 from ghosted import mail
 
 _MAX_BYTES = int(
-    os.environ.get("RABBIT_INBOX_MAX_BYTES", str(25 * 1024 * 1024))
+    os.environ.get("GHOSTED_INBOX_MAX_BYTES", str(25 * 1024 * 1024))
 )  # 25MB/msg
 _MAX_LINE = 8192
 _TIMEOUT = 30  # slowloris / idle-peer guard
@@ -118,10 +118,10 @@ def _wrap(conn: socket.socket, key: str) -> None:
 
 
 def serve(port: int = 25, key: str | None = None, host: str = "0.0.0.0") -> None:
-    key = key or os.environ.get("RABBIT_INBOX_KEY")
+    key = key or os.environ.get("GHOSTED_INBOX_KEY")
     if not key:
         raise SystemExit(
-            "refusing to start: set RABBIT_INBOX_KEY "
+            "refusing to start: set GHOSTED_INBOX_KEY "
             "(inbound mail must not be sealed under a shared default key)"
         )
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

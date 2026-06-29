@@ -21,7 +21,7 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class CryptoModule(Protocol):
-    """ghosted.crypto — RABBIT-CIPHER-1 seal/open used by vault + mail."""
+    """ghosted.crypto — GHOSTED-CIPHER-1 seal/open used by vault + mail."""
 
     def encrypt(self, plaintext: str, passphrase: str) -> Any: ...
     def decrypt(self, blob: Any, passphrase: str) -> str: ...

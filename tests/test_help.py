@@ -47,4 +47,4 @@ def test_homepage_help_page_renders():
     from ghosted import homepage as h
 
     page = h._help_page()
-    assert "Rabbit" in page and "recon" in page and "stego" in page.lower()
+    assert "Ghosted" in page and "recon" in page and "stego" in page.lower()
