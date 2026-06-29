@@ -10,7 +10,7 @@ WHY THIS IS SOVEREIGN
       Montgomery ladder), the same curve WireGuard uses, with the same clamping
       as ``wg genkey`` / ``wg pubkey``. No ``wg`` binary, no ``cryptography``
       native lib, no online service ever sees a private key. Consistent with
-      Rabbit's pure-Python crypto stack (RABBIT-CIPHER-1 / RABBIT-KDF-1).
+      Rabbit's pure-Python crypto stack (GHOSTED-CIPHER-1 / GHOSTED-KDF-1).
     * Configs are written by Rabbit and contain only his pack's material.
     * Optional per-link pre-shared keys add a symmetric layer on top of the
       Noise handshake (defence-in-depth, mildly post-quantum-resistant).
@@ -387,7 +387,7 @@ class PackMesh:
     def write_encrypted(
         self, passphrase: str, out_dir: str | os.PathLike | None = None
     ) -> dict[str, Path]:
-        """Write each config SEALED at rest with RABBIT-CIPHER-1 (the same
+        """Write each config SEALED at rest with GHOSTED-CIPHER-1 (the same
         sovereign cipher as the rest of Rabbit) → ``<name>.conf.enc``.
 
         A wg0.conf holds a private key, so leaving it as plaintext on disk is the

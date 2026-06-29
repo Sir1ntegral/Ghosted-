@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """
-Rabbit Ghost — standalone stealth console.
+Ghosted — standalone stealth console.
 
 Separated from the live Rabbit runtime per Lucy's authorization, this bundles
 the FULL ghost stack (recon / cloak-stego / forge / traffic / dissect) together
 with the SovereignBrowserEngine (Google/Bing/YouTube/Tor) into one app.
 
-Governance note: run standalone, Ghost is OUTSIDE Rabbit's Madara/Watchtower
+Governance note: run standalone, Ghosted is OUTSIDE Rabbit's Madara/Watchtower
 envelope. This console keeps the voice-auth-as-Lucy intent by being launched
 only from Lucy's own desktop icon. Defensive/research use on Lucy's own device.
 """
@@ -18,7 +18,7 @@ import sys
 import textwrap
 
 # Frozen-console fix: force UTF-8 on stdout/stderr so the banner em-dashes and any
-# Rabbit Unicode render correctly instead of as cp1252 replacement chars (the glitch).
+# Unicode render correctly instead of as cp1252 replacement chars (the glitch).
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -26,11 +26,11 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 BANNER = r"""
-   ____ _               _      ____  _   _  ___  ____ _____
-  |  _ \ |__   ___  ___| |_   / ___|| | | |/ _ \/ ___|_   _|
-  | |_) | '_ \ / _ \/ __| __| | |  _| |_| | | | \___ \ | |
-  |  _ <| |_) |  __/ (__| |_  | |_| |  _  | |_| |___) || |
-  |_| \_\_.__/ \___|\___|\__|  \____|_| |_|\___/|____/ |_|
+   ____ _   _  ___  ____ _____ _____ ____
+  / ___| | | |/ _ \/ ___|_   _| ____|  _ \
+ | |  _| |_| | | | \___ \ | | |  _| | | | |
+ | |_| |  _  | |_| |___) || | | |___| |_| |
+  \____|_| |_|\___/|____/ |_| |_____|____/
         sovereign stealth console — ghost + browser
 """
 
@@ -58,7 +58,7 @@ def menu() -> None:
     ) as e:  # boot must reach the prompt even if the stealth stack can't load
         print(
             f"[ghost] stealth stack unavailable ({type(e).__name__}: {e}).\n"
-            "        Running with reduced commands — the rabbit mind isn't importable.\n"
+            "        Running with reduced commands — the stealth stack failed to load.\n"
             "        Stdlib commands (connect/spool/contacts/filters/identity/parse) still work."
         )
     try:  # auto-complete spooled mesh-mail / fetch the instant connectivity returns
@@ -77,7 +77,7 @@ def menu() -> None:
           browse <query>    sovereign web search (Google/Bing/YT/Tor)
           login             unlock / set the master password (vault + mesh)
           network           build a WireGuard mesh, sealed in the vault (login first)
-          encrypt <text>    seal text with RABBIT-CIPHER-1 (passphrase)
+          encrypt <text>    seal text with GHOSTED-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
           scan <path> [q]   EDR-lite file safety check (q = quarantine if malicious)
@@ -132,7 +132,7 @@ def handle_command(
 
         out(help_text.detail(rest) if rest.strip() else help_text.overview())
     elif cmd in ("recon", "forge") and g is None:
-        out("ghost stealth stack unavailable (the rabbit mind isn't importable)")
+        out("ghost stealth stack unavailable (failed to load)")
     elif cmd == "recon":
         out(g.recon(rest))
     elif cmd == "forge":
@@ -232,7 +232,7 @@ def handle_command(
                 return True
             target = arg.strip() or os.path.join(
                 os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
-                "RabbitGhost",
+                "Ghosted",
                 "mesh-export",
             )
             os.makedirs(target, exist_ok=True)

@@ -37,7 +37,7 @@ def test_imap_refuses_credentials_without_ssl():
 def test_smtp_inbox_refuses_to_start_without_key(monkeypatch):
     from ghosted import smtp_inbox
 
-    monkeypatch.delenv("RABBIT_INBOX_KEY", raising=False)
+    monkeypatch.delenv("GHOSTED_INBOX_KEY", raising=False)
     with pytest.raises(SystemExit):
         smtp_inbox.serve(port=0, key=None)
 

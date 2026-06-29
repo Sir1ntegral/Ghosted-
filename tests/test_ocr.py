@@ -1,4 +1,4 @@
-"""OCR test — RABBIT-OCR-1 via the parser. Skips unless the engine + mind + PIL present."""
+"""OCR test — Ghosted OCR via the parser. Skips unless the engine + PIL present."""
 
 import os
 import sys
@@ -27,11 +27,11 @@ def test_ocr_extracts_text_from_image(tmp_path):
         font = ImageFont.truetype("arial.ttf", 48)
     except Exception:
         font = ImageFont.load_default()
-    d.text((20, 40), "RABBIT OCR WORKS", fill="black", font=font)
+    d.text((20, 40), "GHOSTED OCR WORKS", fill="black", font=font)
     img.save(p)
 
     res = parser.parse_file(p)
     assert res["type"] == "image"
     assert res.get("backend") == "ghosted-ocr"
     txt = (res.get("text") or "").upper()
-    assert ("RABBIT" in txt) or ("OCR" in txt) or ("WORKS" in txt)
+    assert ("GHOSTED" in txt) or ("OCR" in txt) or ("WORKS" in txt)

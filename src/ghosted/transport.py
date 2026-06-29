@@ -52,7 +52,7 @@ def online(
 
 def _spool_dir(name: str) -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "RabbitGhost", "spool", name)
+    d = os.path.join(base, "Ghosted", "spool", name)
     os.makedirs(d, exist_ok=True)
     return d
 

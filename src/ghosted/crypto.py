@@ -3,7 +3,7 @@
 Decoupled from ``rabbit.core.crypto``: this module owns its crypto outright so
 Ghosted is a standalone tool, not a dependent of Rabbit's greater being. The
 primitives are vendored pure-Python implementations (``_sovereign_kdf`` =
-RABBIT-KDF-1, ``_sovereign_cipher`` = ChaCha20-Poly1305), so there is nothing to
+GHOSTED-KDF-1, ``_sovereign_cipher`` = ChaCha20-Poly1305), so there is nothing to
 ``pip install`` and nothing reaching into the rabbit package.
 
 Byte-format compatibility is intentional and load-bearing: the on-disk blob
@@ -44,7 +44,7 @@ __all__ = [
     "DecryptionError",
     "KDF_ARGON2ID",
     "KDF_SCRYPT",
-    "KDF_RABBIT",
+    "KDF_GHOSTED",
 ]
 
 # --- Crypto sizing (inlined from the original rabbit.core.constants) ---------
@@ -56,7 +56,7 @@ CRYPTO_MAX_PLAINTEXT_BYTES = 10 * 1024 * 1024  # 10 MB
 # --- KDF identifiers — serialised into every blob; decrypt() dispatches on these
 KDF_ARGON2ID: int = 0x01  # legacy (decrypt-only; needs `cryptography`, optional)
 KDF_SCRYPT: int = 0x02  # legacy fallback (hashlib.scrypt, stdlib)
-KDF_RABBIT: int = 0x03  # RABBIT-KDF-1 — pure-Python primary path
+KDF_GHOSTED: int = 0x03  # GHOSTED-KDF-1 — pure-Python primary path
 
 # 2-byte sentinel that cannot begin a legacy (pre-tag) blob with meaningful
 # probability — old blobs start with 16 random salt bytes.
@@ -76,12 +76,12 @@ except Exception:  # noqa: BLE001 — argon2 is an optional legacy decrypt path
     _ARGON2_AVAILABLE = False
     Argon2id = None  # type: ignore[assignment,misc]
 
-# RABBIT-KDF-1 — pure Python, always available. Preset + domain tag MUST match
+# GHOSTED-KDF-1 — pure Python, always available. Preset + domain tag MUST match
 # the original rabbit.core.crypto values for on-disk compatibility.
-_kdf_preset_name = os.environ.get("RABBIT_KDF_PRESET", "INTERACTIVE").upper()
+_kdf_preset_name = os.environ.get("GHOSTED_KDF_PRESET", "INTERACTIVE").upper()
 _kdf_preset = getattr(KDFPreset, _kdf_preset_name, KDFPreset.INTERACTIVE)
-_RABBIT_KDF = _SovereignKDF(
-    preset=_kdf_preset, domain_tag="rabbit:crypto:chacha20-poly1305:v1"
+_GHOSTED_KDF = _SovereignKDF(
+    preset=_kdf_preset, domain_tag="ghosted:crypto:chacha20-poly1305:v1"
 )
 
 
@@ -99,7 +99,7 @@ class EncryptedBlob:
     ciphertext: bytes
     salt: bytes
     nonce: bytes
-    kdf_id: int = KDF_RABBIT
+    kdf_id: int = KDF_GHOSTED
 
     def to_bytes(self) -> bytes:
         """Serialise: MAGIC(2) + kdf_id(1) + salt(16) + nonce(12) + ciphertext."""
@@ -135,13 +135,13 @@ class EncryptedBlob:
         return cls(ciphertext=ciphertext, salt=salt, nonce=nonce, kdf_id=kdf_id)
 
 
-def _derive_key(passphrase: str, salt: bytes, kdf_id: int = KDF_RABBIT) -> bytes:
+def _derive_key(passphrase: str, salt: bytes, kdf_id: int = KDF_GHOSTED) -> bytes:
     """Derive a 32-byte key from passphrase + salt, dispatching on kdf_id."""
     if not passphrase:
         raise ValueError("Passphrase must not be empty.")
 
-    if kdf_id == KDF_RABBIT:
-        return _RABBIT_KDF.derive_raw(passphrase, salt, CRYPTO_KEY_LEN)
+    if kdf_id == KDF_GHOSTED:
+        return _GHOSTED_KDF.derive_raw(passphrase, salt, CRYPTO_KEY_LEN)
 
     if kdf_id == KDF_SCRYPT:
         return hashlib.scrypt(
@@ -163,7 +163,7 @@ def _derive_key(passphrase: str, salt: bytes, kdf_id: int = KDF_RABBIT) -> bytes
 
 
 def encrypt(plaintext: str, passphrase: str) -> EncryptedBlob:
-    """Encrypt a UTF-8 string (ChaCha20-Poly1305 + RABBIT-KDF-1). Fresh salt+nonce."""
+    """Encrypt a UTF-8 string (ChaCha20-Poly1305 + GHOSTED-KDF-1). Fresh salt+nonce."""
     if not plaintext:
         raise ValueError("Plaintext must not be empty.")
 
@@ -176,9 +176,9 @@ def encrypt(plaintext: str, passphrase: str) -> EncryptedBlob:
 
     salt = os.urandom(CRYPTO_SALT_LEN)
     nonce = os.urandom(CRYPTO_NONCE_LEN)
-    key = _derive_key(passphrase, salt, KDF_RABBIT)
+    key = _derive_key(passphrase, salt, KDF_GHOSTED)
     ciphertext = SovereignChaCha20Poly1305(key).encrypt(nonce, encoded, None)
-    return EncryptedBlob(ciphertext=ciphertext, salt=salt, nonce=nonce, kdf_id=KDF_RABBIT)
+    return EncryptedBlob(ciphertext=ciphertext, salt=salt, nonce=nonce, kdf_id=KDF_GHOSTED)
 
 
 def decrypt(blob: EncryptedBlob, passphrase: str) -> str:
@@ -199,12 +199,12 @@ def decrypt(blob: EncryptedBlob, passphrase: str) -> str:
 
 
 def is_legacy_blob(blob: EncryptedBlob) -> bool:
-    """True if the blob uses a legacy KDF (not RABBIT-KDF-1)."""
-    return blob.kdf_id != KDF_RABBIT
+    """True if the blob uses a legacy KDF (not GHOSTED-KDF-1)."""
+    return blob.kdf_id != KDF_GHOSTED
 
 
 def migrate_blob(blob: EncryptedBlob, passphrase: str) -> EncryptedBlob:
-    """Re-encrypt a legacy blob under RABBIT-KDF-1. No-op if already sovereign."""
-    if blob.kdf_id == KDF_RABBIT:
+    """Re-encrypt a legacy blob under GHOSTED-KDF-1. No-op if already sovereign."""
+    if blob.kdf_id == KDF_GHOSTED:
         return blob
     return encrypt(decrypt(blob, passphrase), passphrase)

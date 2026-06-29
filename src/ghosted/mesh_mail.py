@@ -1,7 +1,7 @@
 """
 Mesh delivery — move @sovereign.dmn black-box mail between peers over WireGuard.
 
-The message is already a RABBIT-CIPHER-1 black box, so transport is opaque end-to-end
+The message is already a GHOSTED-CIPHER-1 black box, so transport is opaque end-to-end
 AND it rides the authenticated WireGuard tunnel. A peer runs ``receiver()``; ``send_to``
 delivers it (multi-port — a dead port isn't fatal), spooling for store-and-forward if
 the peer is offline so it completes the instant the peer returns.

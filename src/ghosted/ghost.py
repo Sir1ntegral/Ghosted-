@@ -106,7 +106,7 @@ class GhostMode:
 
 
 class GhostCloak:
-    """LSB image steganography with optional RABBIT-CIPHER-1 payload encryption."""
+    """LSB image steganography with optional GHOSTED-CIPHER-1 payload encryption."""
 
     def __init__(self, passphrase: str | None = None) -> None:
         self._pw = passphrase or None

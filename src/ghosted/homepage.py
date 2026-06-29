@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """
-Rabbit Home — a sovereign, Google-like home page.
+Ghosted Home — a sovereign, Google-like home page.
 
 Pure-stdlib HTTP server (http.server) — no Flask, no Streamlit, no new deps.
-Serves Rabbit's own search homepage: ghost-rabbit logo + a centered search box
+Serves Ghosted's own search homepage: ghost-rabbit logo + a centered search box
 that routes queries through the SovereignBrowserEngine (5-engine masks, Tor-by-
 default). Binds 0.0.0.0 so it is reachable by IP across LAN / Tailscale /
-WireGuard, and shows every address Rabbit is reachable at PLUS the current
+WireGuard, and shows every address Ghosted is reachable at PLUS the current
 egress IP (what the ISP / Tor exit sees).
 """
 from __future__ import annotations
@@ -67,13 +67,13 @@ def _all_local_ips() -> list[str]:
 
 
 def _classify(ips: list[str]) -> dict[str, list[str]]:
-    # No Tailscale — Rabbit reaches across his OWN sovereign WireGuard PackMesh.
+    # No Tailscale — Ghosted reaches across his OWN sovereign WireGuard PackMesh.
     out: dict[str, list[str]] = {"lan": [], "wireguard": [], "loopback": []}
     for ip in ips:
         if ip.startswith("127."):
             out["loopback"].append(ip)
         elif ip.startswith("10.44."):
-            out["wireguard"].append(ip)  # Rabbit PackMesh default subnet
+            out["wireguard"].append(ip)  # Ghosted PackMesh default subnet
         else:
             out["lan"].append(ip)
     return out
@@ -83,7 +83,7 @@ _EGRESS_CACHE: dict = {"ip": None, "at": 0.0}
 
 
 def _egress_ip() -> str:
-    """What the outside world sees — via Rabbit's own sovereign HTTP (masked).
+    """What the outside world sees — via Ghosted's own sovereign HTTP (masked).
     Cached 120s so it never blocks page renders (perf: was adding ~5s/request)."""
     import time
 
@@ -126,7 +126,7 @@ def _search(query: str) -> list:
 def _gojo_audit_path() -> str:
     """Windows-safe absolute audit log path (avoids cwd-relative 'logs' failure)."""
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "RabbitGhost", "logs")
+    d = os.path.join(base, "Ghosted", "logs")
     try:
         os.makedirs(d, exist_ok=True)
         return os.path.join(d, "security_audit.jsonl")
@@ -305,22 +305,22 @@ _PRIVACY_JS = """
   var p=document.getElementById('panel');if(!p)return;var rows='';
   if(kind==='hist'){
    rows='<div class=ph><b>History</b><span class=priv>private \\u00b7 on this device only</span>'
-     +'<label class=tg><input type=checkbox '+(on()?'checked':'')+' onclick="rabbitHistToggle(this)"> record</label>'
-     +'<span class=x onclick="rabbitClear()">clear</span></div>';
+     +'<label class=tg><input type=checkbox '+(on()?'checked':'')+' onclick="ghostedHistToggle(this)"> record</label>'
+     +'<span class=x onclick="ghostedClear()">clear</span></div>';
    var H=get(HK);H.forEach(function(e){rows+='<div class=pi><a href="/search?q='+encodeURIComponent(e.q)+'">'+esc(e.q)+'</a></div>'});
    if(!H.length)rows+='<div class=pe>no history</div>';
   }else{
    rows='<div class=ph><b>Favorites</b><span class=priv>saved on this device</span></div>';
-   var F=get(FK);F.forEach(function(e,i){rows+='<div class=pi><a href="/search?q='+encodeURIComponent(e.q)+'">'+esc(e.q)+'</a><span class=x onclick="rabbitUnfav('+i+')">\\u00d7</span></div>'});
+   var F=get(FK);F.forEach(function(e,i){rows+='<div class=pi><a href="/search?q='+encodeURIComponent(e.q)+'">'+esc(e.q)+'</a><span class=x onclick="ghostedUnfav('+i+')">\\u00d7</span></div>'});
    if(!F.length)rows+='<div class=pe>no favorites yet \\u2014 star a search</div>';
   }
   p.innerHTML=rows;p.style.display='block';p.dataset.open=kind;
  }
- window.rabbitPanel=function(kind){var p=document.getElementById('panel');if(!p)return;if(p.dataset.open===kind){p.style.display='none';p.dataset.open='';return}render(kind)};
- window.rabbitHistToggle=function(cb){localStorage.setItem(EK,cb.checked?'1':'0')};
- window.rabbitClear=function(){set(HK,[]);render('hist')};
- window.rabbitUnfav=function(i){var f=get(FK);f.splice(i,1);set(FK,f);render('fav')};
- window.rabbitFav=function(){var x=curQ();if(!x)return;var f=get(FK);if(!f.some(function(e){return e.q===x})){f.unshift({q:x});set(FK,f)}var b=document.getElementById('star');if(b)b.textContent='\\u2605'};
+ window.ghostedPanel=function(kind){var p=document.getElementById('panel');if(!p)return;if(p.dataset.open===kind){p.style.display='none';p.dataset.open='';return}render(kind)};
+ window.ghostedHistToggle=function(cb){localStorage.setItem(EK,cb.checked?'1':'0')};
+ window.ghostedClear=function(){set(HK,[]);render('hist')};
+ window.ghostedUnfav=function(i){var f=get(FK);f.splice(i,1);set(FK,f);render('fav')};
+ window.ghostedFav=function(){var x=curQ();if(!x)return;var f=get(FK);if(!f.some(function(e){return e.q===x})){f.unshift({q:x});set(FK,f)}var b=document.getElementById('star');if(b)b.textContent='\\u2605'};
  var b=document.getElementById('star');if(b&&q&&get(FK).some(function(e){return e.q===q}))b.textContent='\\u2605';
 })();
 """
@@ -328,12 +328,12 @@ _PRIVACY_JS = """
 # Lola voice — browser-native speech synthesis (no deps, no server audio).
 # Reads the results aloud (in case you don't want to read); click again to stop.
 _VOICE_JS = """
-window.rabbitSpeak=function(){
+window.ghostedSpeak=function(){
  if(!('speechSynthesis' in window)){alert('voice not supported in this browser');return}
  if(window.speechSynthesis.speaking){window.speechSynthesis.cancel();return}
  var parts=[],rs=document.querySelectorAll('.r');
  if(rs.length){rs.forEach(function(r){var a=r.querySelector('a'),s=r.querySelector('.s');parts.push((a?a.textContent:'')+'. '+(s?s.textContent:''))})}
- else{parts.push('Rabbit sovereign search. Type a query to begin.')}
+ else{parts.push('Ghosted sovereign search. Type a query to begin.')}
  var u=new SpeechSynthesisUtterance(parts.join(' \\u2014 '));
  u.rate=1.0;u.pitch=1.05;
  var vs=window.speechSynthesis.getVoices();
@@ -357,16 +357,16 @@ def _ip_bar() -> str:
 
 def _home_page() -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>Rabbit</title><style>{_CSS}</style></head><body>
+<title>Ghosted</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
+<div class="toolbar"><button onclick="ghostedPanel('hist')">🕘 History</button><button onclick="ghostedPanel('fav')">★ Favorites</button><button onclick="ghostedSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
 <div id="panel" class="panel"></div>
-<div class="logo">🐰 <b>Rabbit</b></div>
+<div class="logo">🐰 <b>Ghosted</b></div>
 <div class="tag">sovereign search — your own masks, your own HTTP</div>
 <form action="/search" method="get" autocomplete="off">
-  <input type="text" name="q" placeholder="Search the web through Rabbit…" autofocus>
+  <input type="text" name="q" placeholder="Search the web through Ghosted…" autofocus>
   <div class="btns">
-    <button type="submit">Rabbit Search</button>
+    <button type="submit">Ghosted Search</button>
     <button type="submit" name="lucky" value="1">I'm Feeling Sovereign</button>
   </div>
 </form>
@@ -404,13 +404,13 @@ def _results_page(query: str) -> str:
         )
     body = "".join(rows) or '<div class="r">no results</div>'
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>{html.escape(query)} — Rabbit</title><style>{_CSS}</style></head><body>
+<title>{html.escape(query)} — Ghosted</title><style>{_CSS}</style></head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="rabbitPanel('hist')">🕘 History</button><button onclick="rabbitPanel('fav')">★ Favorites</button><button onclick="rabbitSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
+<div class="toolbar"><button onclick="ghostedPanel('hist')">🕘 History</button><button onclick="ghostedPanel('fav')">★ Favorites</button><button onclick="ghostedSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
 <div id="panel" class="panel"></div>
-<div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Rabbit</b></div>
+<div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Ghosted</b></div>
 <form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
- value="{html.escape(query)}"><span id="star" onclick="rabbitFav()" title="Save to favorites">&#9734;</span></form>
+ value="{html.escape(query)}"><span id="star" onclick="ghostedFav()" title="Save to favorites">&#9734;</span></form>
 <div class="res">{body}</div>
 {_ip_bar()}
 <script>{_TAB_JS}</script>
@@ -479,8 +479,8 @@ def _login_page(msg: str = "") -> str:
         else ""
     )
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>Rabbit — unlock</title><style>{_CSS}</style></head><body>
-<div class="logo">🐰 <b>Rabbit</b></div>
+<title>Ghosted — unlock</title><style>{_CSS}</style></head><body>
+<div class="logo">🐰 <b>Ghosted</b></div>
 <div class="tag">remote access — unlock with your master password</div>
 <form action="/login" method="post" autocomplete="off">
   <input type="password" name="pw" placeholder="master password" autofocus>
@@ -508,9 +508,9 @@ def _help_page() -> str:
         ".hr b{color:#cfd6ff;font-size:14px}.hr span{color:#8890b5;font-size:13px;margin-left:10px}"
         ".hd{color:#aeb6dc;font-size:13px;margin-top:5px;line-height:1.45}</style>"
     )
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Rabbit — Help</title>
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Help</title>
 <style>{_CSS}</style>{extra}</head><body>
-<div class="logo" style="font-size:40px;margin-top:7vh">🐰 <b>Rabbit</b> Help</div>
+<div class="logo" style="font-size:40px;margin-top:7vh">🐰 <b>Ghosted</b> Help</div>
 <div class="tag">everything the app does</div>
 <div class="help">{body}<div class="hd" style="margin-top:24px">{html.escape(help_text.CAPABILITIES)}</div></div>
 </body></html>"""
@@ -646,7 +646,7 @@ def serve(port: int = _PORT) -> None:
     except Exception:
         pass
     cls = _classify(_all_local_ips())
-    print(f"🐰 Rabbit home page live — reachable by IP on port {port}:")
+    print(f"🐰 Ghosted home page live — reachable by IP on port {port}:")
     print(f"   local:     http://127.0.0.1:{port}")
     for ip in cls["lan"] + cls["wireguard"]:
         print(f"   by IP:     http://{ip}:{port}")

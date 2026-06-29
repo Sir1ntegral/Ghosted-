@@ -31,7 +31,7 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
         (
             "cloak <img> <msg>",
             "hide an encrypted message in an image (stego)",
-            "Encrypts the message with RABBIT-CIPHER-1, then LSB-embeds it in the image. A true "
+            "Encrypts the message with GHOSTED-CIPHER-1, then LSB-embeds it in the image. A true "
             "black box: the secret is absent from the output bytes; only the passphrase recovers it.",
         ),
         (
@@ -43,7 +43,7 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
     "Crypto + vault": [
         (
             "encrypt <text>",
-            "seal text with RABBIT-CIPHER-1",
+            "seal text with GHOSTED-CIPHER-1",
             "Returns an opaque token only the passphrase opens.",
         ),
         (
@@ -54,7 +54,7 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
         (
             "login",
             "unlock / set the master password",
-            "Sets or verifies the master password (RABBIT-KDF). Required before building a mesh; "
+            "Sets or verifies the master password (GHOSTED-KDF). Required before building a mesh; "
             "stores only an encrypted verifier, never the password.",
         ),
     ],
@@ -140,7 +140,7 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
         (
             "parse <path|text>",
             "extract text/structure",
-            "Parses pdf/docx/html/csv/json/txt; images go through RABBIT-OCR-1 when the OCR engine "
+            "Parses pdf/docx/html/csv/json/txt; images go through OCR (rapidocr/pytesseract) when the engine "
             "is installed (pip install .[ocr]).",
         ),
     ],

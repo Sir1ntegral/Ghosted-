@@ -73,7 +73,7 @@ def _entropy(data: bytes) -> float:
 
 def _quarantine_dir() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "RabbitGhost", "quarantine")
+    d = os.path.join(base, "Ghosted", "quarantine")
     os.makedirs(d, exist_ok=True)
     return d
 
