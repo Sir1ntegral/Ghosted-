@@ -24,6 +24,14 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
             "with clearnet fallback, then re-ranks results by meaning, context, sentiment, and intent.",
         ),
         (
+            "home [port]",
+            "open the search website (GUI)",
+            "Starts Ghosted's own Google-like search homepage (ghost logo + centered search bar + "
+            "results layout, history/favorites/voice) on a local port (default 7654) and opens it in "
+            "your browser. The server runs in a background thread so the console stays interactive; "
+            "the page is Gojo-gated and fail-closed to localhost. Aliases: gui, web.",
+        ),
+        (
             "forge <path>",
             "produce a unique, equivalent artifact",
             "Generates a functionally-equivalent but byte-distinct version of a source file.",
@@ -160,6 +168,70 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
             "and reports whether it is importable and whether its optional backing library is "
             "installed, so you can see exactly what works now and what `pip install` would unlock.",
         ),
+        (
+            "health",
+            "device health monitor",
+            "A sovereign, pure-Python read of the machine: CPU, memory, disk, battery, uptime, "
+            "network connectivity, and security posture (EDR + egress IP), each with an ok/warn/"
+            "critical state and one overall verdict. Also a live panel on the website at /health.",
+        ),
+    ],
+    "Account + learning": [
+        (
+            "setup",
+            "guided account setup (name·email·text·2FA·location)",
+            "Captures everything at account setup: master password, display name, your email(s) "
+            "(with 2nd/3rd fallbacks), a mobile number + carrier for text codes, an authenticator "
+            "(QR + secret), a trusted-location factor, and one-time recovery codes. Multi-factor so "
+            "two factors are required at login. Also available as onboarding on the website.",
+        ),
+        (
+            "account",
+            "your account info: personal data + history + stats",
+            "Shows all your personal data (display name, identities, email accounts, enrolled MFA "
+            "factors), your recent search history, and your usage statistics. On the website the "
+            "signed-in name links to this same page.",
+        ),
+        (
+            "mfa",
+            "multi-factor status",
+            "Two means of identification are required: the master password PLUS two enrolled factors "
+            "from authenticator(QR/TOTP), email code, text message, trusted location, and recovery "
+            "codes. Every one-time code is generated + sealed with sovereign encryption (one-time "
+            "use), and verification is fail-soft (clock-drift window + recovery escape).",
+        ),
+        (
+            "prefs [set <k> <v>]",
+            "customize your experience",
+            "Per-account preferences: accent theme, optional notifications (off by default) and which "
+            "kinds, Lola voice auto-read, relevance badges, and display name. 'prefs' shows them; "
+            "'prefs set <key> <value>' changes one; 'prefs reset' restores defaults.",
+        ),
+        (
+            "notify",
+            "your optional notifications",
+            "Opt-in notices (health alerts, new mail, learning suggestions) — only shown when you "
+            "enable them in prefs, and only to you (the signed-in account holder).",
+        ),
+        (
+            "feedback [sub]",
+            "the learning loop — every input is a data point",
+            "Ghosted learns from how searches are used: result clicks, dwell time, and 👍/👎 ratings "
+            "float helpful results up next time, scaled by how much data the loop has earned "
+            "(adaptivity). 'feedback' shows the rollup; 'feedback good|bad <query>' rates a query; "
+            "'feedback rate <score> <query>' gives an explicit 1–5 / -1..1 score. The website "
+            "captures clicks and dwell automatically via beacons.",
+        ),
+    ],
+    "Open use": [
+        (
+            "open access",
+            "full capabilities for everyone; personal data stays private",
+            "The website (public domain http://sovereign.dmn:7654) serves every capability — search, "
+            "spell-corrected results, device health, help — to any guest on any connection, no account "
+            "needed. Personal data (your vault, mail, identities, and mesh) is the ONLY thing behind the "
+            "account gate; sign in at /account (or create an account there on first run).",
+        ),
     ],
     "Session": [
         ("status", "show ghost posture", "Whether ghost mode is active."),
@@ -173,11 +245,15 @@ HELP: dict[str, list[tuple[str, str, str]]] = {
 }
 
 CAPABILITIES = (
-    "Ghosted also runs a sovereign Google-like homepage (search + meaning-ranking + tabs + "
-    "private on-device history/favorites + a Lola read-aloud button + a Gojo-gated login for remote "
-    "access over the mesh), a black-box mail system (@sovereign.dmn end-to-end + real mesh delivery + "
-    "opt-in IMAP/POP receive + external SMTP send), and a WireGuard key vault — all sovereign, hardened, "
-    "and degrading gracefully when an optional engine isn't present."
+    "Ghosted also runs a sovereign Google-like homepage (search + spell-corrected results + "
+    "meaning-ranking + tabs + private on-device history/favorites + a Lola read-aloud button + a "
+    "live device-health panel) at the public domain http://sovereign.dmn:7654 — OPEN USE: every "
+    "capability is available to any guest on any connection, while personal data (vault, mail, "
+    "identities, mesh) stays behind the account gate. It learns from use — clicks, dwell, and "
+    "ratings adapt ranking (every input is a data point). Plus a black-box mail system "
+    "(@sovereign.dmn end-to-end + real mesh delivery + opt-in IMAP/POP receive + external SMTP "
+    "send) and a WireGuard key vault — all sovereign, hardened, and degrading gracefully when an "
+    "optional engine isn't present."
 )
 
 

@@ -19,7 +19,11 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
+
+# The sovereign public domain — surfaced as the open-use URL. It is a .dmn sovereign
+# TLD (resolved via the mesh/hosts, not public DNS); the server answers on any Host.
+PUBLIC_DOMAIN = "sovereign.dmn"
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -261,6 +265,27 @@ body{padding-top:44px}
 .panel .x{color:#6f7aa0;cursor:pointer}
 .panel .x:hover{color:#ff8aa0}
 #star{cursor:pointer;color:#9aa9ff;font-size:22px;margin-left:10px;vertical-align:middle}
+.dym{width:min(700px,92vw);margin:14px 0 -8px;color:#aeb6dc;font-size:14px}
+.dym b{color:#cfd6ff}.dym a{color:#9aa9ff;text-decoration:none}.dym a:hover{text-decoration:underline}
+.fbbar{margin:18px 0 8px;color:#8890b5;font-size:13px;display:flex;align-items:center;gap:8px}
+.fbbar button{font-size:15px;padding:4px 10px;margin:0}
+.fbbar #fbmsg{color:#7bd88f;font-size:12px}
+.health{width:min(560px,92vw);margin:26px 0 90px}
+.hcard{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border:1px solid #1c2138;border-radius:12px;margin-bottom:8px;background:rgba(22,26,48,.5)}
+.hcard .hl{color:#cfd6ff;font-size:14px}.hcard .hv{font-size:14px;font-variant-numeric:tabular-nums}
+.s-ok{color:#7bd88f}.s-warn{color:#ffcf6b}.s-critical{color:#ff8aa0}.s-none{color:#6f7aa0}
+.acct{width:min(580px,92vw);margin:20px 0 100px;text-align:left}
+.acct h3{color:#9aa9ff;font-size:15px;margin:30px 0 10px;font-weight:600;padding-top:14px;border-top:1px solid #232842}
+.acct h3:first-of-type{border-top:none;padding-top:0}
+.acct form{margin:0 0 16px;padding:14px 16px;border:1px solid #1c2138;border-radius:12px;background:rgba(22,26,48,.4)}
+.acct .row{padding:10px 2px;border-bottom:1px solid #1c2138;font-size:13.5px;color:#cfd6ff;overflow:hidden}
+.acct .row:last-child{border-bottom:none}
+.acct .row label{margin-right:14px;display:inline-block}
+.acct input[type=text],.acct input[type=password]{width:100%;margin:7px 0;padding:11px 14px;border-radius:10px;border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#fff;font-size:14px}
+.acct select{margin:0 6px;padding:6px 10px;border-radius:8px;border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#fff}
+.acct .btns{margin-top:14px;text-align:left}
+.acct .btns button{margin:0 10px 0 0}
+.acct .muted{color:#7e88b5;font-size:12px;margin:4px 0}
 """
 
 _TAB_JS = """
@@ -343,10 +368,99 @@ window.ghostedSpeak=function(){
 };
 """
 
+# Feedback beacons — every interaction is a data point and must not be wasted.
+# Captures result CLICKS (which link, what rank), DWELL (time on a result before you
+# return), and explicit 👍/👎. Uses navigator.sendBeacon so signals survive navigation;
+# falls back to keepalive fetch. All POST to the public /fb/* endpoints.
+_FEEDBACK_JS = """
+window.ghostedFB=(function(){
+ var q=(new URLSearchParams(location.search).get('q')||'').trim();
+ function beacon(path,obj){try{var b=new Blob([JSON.stringify(obj)],{type:'application/json'});
+   if(navigator.sendBeacon&&navigator.sendBeacon(path,b))return;}catch(e){}
+   try{fetch(path,{method:'POST',body:JSON.stringify(obj),keepalive:true,headers:{'Content-Type':'application/json'}})}catch(_){}}
+ var last=null,t0=0;
+ function clickResult(url,pos){last={q:q,url:url,pos:pos};t0=Date.now();beacon('/fb/click',last)}
+ function flushDwell(){if(last&&t0){var d=(Date.now()-t0)/1000;if(d>0.4)beacon('/fb/dwell',{q:last.q,url:last.url,dwell:d});t0=0}}
+ document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushDwell();else if(last)t0=Date.now()});
+ window.addEventListener('pagehide',flushDwell);
+ function rate(v){beacon('/fb/rate',{q:q,v:v});var e=document.getElementById('fbmsg');if(e)e.textContent=v>0?'\\u2713 thanks — marked helpful':'\\u2713 thanks — noted'}
+ return {click:clickResult,rate:rate};
+})();
+"""
+
+
+def _ctx(handler) -> dict:
+    """Per-request view context: is this the signed-in account holder, their display
+    name, accent, and notification count. Guests get defaults (no personal data)."""
+    authed = _is_authed(handler)
+    name, accent, notes = "", "#9aa9ff", 0
+    if authed:
+        try:
+            from ghosted import preferences
+
+            name = preferences.get("display_name") or ""
+            accent = preferences.accent_color()
+        except Exception:
+            pass
+        try:
+            from ghosted import notifications
+
+            notes = notifications.count()
+        except Exception:
+            notes = 0
+    return {"authed": authed, "name": name, "accent": accent, "notes": notes}
+
+
+def _accent_style(ctx) -> str:
+    """Personalise the page with the account holder's accent colour (when not default)."""
+    a = ctx.get("accent")
+    if not a or a == "#9aa9ff":
+        return ""
+    return (
+        f"<style>.logo b{{background:linear-gradient(90deg,{a},{a});-webkit-background-clip:text;"
+        f"background-clip:text;color:transparent}}.r a,.dym a,.dym b,.panel .pi a{{color:{a}}}"
+        f"input[type=text]:focus{{border-color:{a}}}</style>"
+    )
+
+
+def _toolbar(ctx) -> str:
+    """The toolbar shown on every page. Always carries the Email link; when signed in
+    it shows the account holder's NAME (a link to their account info) + a notifications
+    bell, so the active account is visible at all times."""
+    authed = ctx.get("authed")
+    email_btn = ('<button onclick="location.href=\'/mail\'" '
+                 'title="Your email — read, send &amp; receive (IMAP)">✉ Email</button>')
+    if authed:
+        notes = ctx.get("notes", 0)
+        badge = f" {notes}" if notes else ""
+        bell = ('<button onclick="location.href=\'/account#notifications\'" '
+                f'title="Notifications">🔔{badge}</button>')
+        label = html.escape(ctx.get("name") or "Account")
+        acct = ('<button onclick="location.href=\'/account\'" '
+                f'title="Your account — personal data, history &amp; usage stats">👤 {label}</button>')
+    else:
+        bell = ""
+        acct = ('<button onclick="location.href=\'/account\'" '
+                'title="Sign in / create account">👤 Sign in</button>')
+    return (
+        '<div class="toolbar">'
+        '<button onclick="location.href=\'/\'" title="Home">🏠 Home</button>'
+        '<button onclick="ghostedPanel(\'hist\')">🕘 History</button>'
+        '<button onclick="ghostedPanel(\'fav\')">★ Favorites</button>'
+        '<button onclick="ghostedSpeak()" title="Lola reads the results aloud">🔊 Lola</button>'
+        '<button onclick="location.href=\'/health\'" title="Device health monitor">🩺 Health</button>'
+        + email_btn + bell + acct +
+        '<button onclick="location.href=\'/help\'" title="Everything the app does">❔ Help</button>'
+        '</div>'
+    )
+
 
 def _ip_bar() -> str:
     cls = _classify(_all_local_ips())
-    parts = [f"<span><b>egress (ISP/Tor sees):</b> {html.escape(_egress_ip())}</span>"]
+    parts = [
+        f"<span><b>public:</b> http://{PUBLIC_DOMAIN}:{_PORT}</span>",
+        f"<span><b>egress (ISP/Tor sees):</b> {html.escape(_egress_ip())}</span>",
+    ]
     label = {"lan": "LAN", "wireguard": "WireGuard", "loopback": "local"}
     for k in ("lan", "wireguard", "loopback"):
         if cls[k]:
@@ -355,14 +469,19 @@ def _ip_bar() -> str:
     return '<div class="ips">' + "".join(parts) + "</div>"
 
 
-def _home_page() -> str:
+def _home_page(ctx: dict | None = None) -> str:
+    ctx = ctx or {"authed": False, "name": "", "accent": "#9aa9ff", "notes": 0}
+    signed = (f'<div class="tag">signed in as <b>{html.escape(ctx["name"] or "account holder")}</b> '
+              f'· <a href="/account" style="color:#9aa9ff;text-decoration:none">your account</a></div>'
+              if ctx.get("authed") else "")
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>Ghosted</title><style>{_CSS}</style></head><body>
+<title>Ghosted</title><style>{_CSS}</style>{_accent_style(ctx)}</head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="ghostedPanel('hist')">🕘 History</button><button onclick="ghostedPanel('fav')">★ Favorites</button><button onclick="ghostedSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
+{_toolbar(ctx)}
 <div id="panel" class="panel"></div>
 <div class="logo">🐰 <b>Ghosted</b></div>
 <div class="tag">sovereign search — your own masks, your own HTTP</div>
+{signed}
 <form action="/search" method="get" autocomplete="off">
   <input type="text" name="q" placeholder="Search the web through Ghosted…" autofocus>
   <div class="btns">
@@ -374,12 +493,37 @@ def _home_page() -> str:
 <script>{_TAB_JS}</script>
 <script>{_PRIVACY_JS}</script>
 <script>{_VOICE_JS}</script>
+<script>{_FEEDBACK_JS}</script>
 </body></html>"""
 
 
-def _results_page(query: str) -> str:
+def _results_page(query: str, ctx: dict | None = None) -> str:
+    ctx = ctx or {"authed": False, "name": "", "accent": "#9aa9ff", "notes": 0}
+    # Spell-check: auto-correct obvious typos and tell the user (intuitive, reversible).
+    used, dym = query, ""
+    try:
+        from ghosted import spellcheck
+
+        sp = spellcheck.correct(query)
+        if sp["changed"]:
+            used = sp["corrected"]
+            dym = (
+                f'<div class="dym">Showing results for '
+                f'<b>{html.escape(used)}</b>. Search instead for '
+                f'<a href="/search?q={quote(query)}">{html.escape(query)}</a>.</div>'
+            )
+    except Exception:
+        used = query
+    results = _search(used)
+    # Every search is a data point — record it (volume feeds ranking + the dictionary).
+    try:
+        from ghosted import feedback
+
+        feedback.record_search(used, len(results) if hasattr(results, "__len__") else 0)
+    except Exception:
+        pass
     rows = []
-    for r in _search(query):
+    for pos, r in enumerate(results):
         title = html.escape(getattr(r, "title", "") or "(no title)")
         raw_url = getattr(r, "url", "") or ""
         url = html.escape(raw_url)
@@ -398,24 +542,34 @@ def _results_page(query: str) -> str:
             sem = getattr(r, "_rabbit_semantic", 0.0)
             meaning = f" · meaning {sem}" if sem else ""
             badge = f'<div class="b">relevance {score}{meaning} · sentiment {senti} {mood}</div>'
+        # click beacon: which result, what rank — captured, not wasted
+        click = f"ghostedFB.click('{raw_url.replace(chr(39), '')}',{pos})"
         rows.append(
-            f'<div class="r"><a href="{href}">{title}</a>'
+            f'<div class="r"><a href="{href}" onclick="{click}">{title}</a>'
             f'<div class="u">{url}</div><div class="s">{snip}</div>{badge}</div>'
         )
     body = "".join(rows) or '<div class="r">no results</div>'
+    fbbar = (
+        '<div class="fbbar">Were these helpful? '
+        '<button onclick="ghostedFB.rate(1)">👍</button>'
+        '<button onclick="ghostedFB.rate(-1)">👎</button>'
+        '<span id="fbmsg"></span></div>'
+    )
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>{html.escape(query)} — Ghosted</title><style>{_CSS}</style></head><body>
+<title>{html.escape(query)} — Ghosted</title><style>{_CSS}</style>{_accent_style(ctx)}</head><body>
 <div id="tabbar" class="tabbar"></div>
-<div class="toolbar"><button onclick="ghostedPanel('hist')">🕘 History</button><button onclick="ghostedPanel('fav')">★ Favorites</button><button onclick="ghostedSpeak()" title="Lola reads the results aloud">🔊 Lola</button><button onclick="location.href='/help'" title="Everything the app does">❔ Help</button></div>
+{_toolbar(ctx)}
 <div id="panel" class="panel"></div>
 <div style="margin-top:24px;font-size:30px">🐰 <b style="color:#9aa9ff">Ghosted</b></div>
 <form action="/search" method="get" style="margin-top:14px"><input type="text" name="q"
  value="{html.escape(query)}"><span id="star" onclick="ghostedFav()" title="Save to favorites">&#9734;</span></form>
-<div class="res">{body}</div>
+{dym}
+<div class="res">{body}{fbbar}</div>
 {_ip_bar()}
 <script>{_TAB_JS}</script>
 <script>{_PRIVACY_JS}</script>
 <script>{_VOICE_JS}</script>
+<script>{_FEEDBACK_JS}</script>
 </body></html>"""
 
 
@@ -429,6 +583,41 @@ _SESSIONS_MAX = 1024  # bound the map (anti-growth)
 _LOGIN_FAILS: dict = {}  # ip -> (fail_count, window_start) — brute-force guard
 _LOGIN_MAX = 5  # failures per window before lockout
 _LOGIN_WINDOW = 300  # 5 min
+
+# Webmail keeps the passphrase in MEMORY only (never disk) for the session, so the
+# black-box mailbox can be opened to read/search without re-typing it every action.
+_MAIL_KEYS: dict = {}  # token -> (passphrase, expiry)
+_MAIL_LOCK = threading.Lock()
+
+
+def _mail_token(handler) -> str:
+    tok = _cookie_token(handler)
+    if tok:
+        return tok
+    ip = handler.client_address[0] if handler.client_address else ""
+    return "local:" + ip  # localhost is authed without a cookie — key by address
+
+
+def _mail_get_key(handler):
+    tok = _mail_token(handler)
+    with _MAIL_LOCK:
+        ent = _MAIL_KEYS.get(tok)
+        if ent and ent[1] > time.time():
+            return ent[0]
+        _MAIL_KEYS.pop(tok, None)
+    return None
+
+
+def _mail_set_key(handler, passphrase: str) -> None:
+    with _MAIL_LOCK:
+        for k in [k for k, v in _MAIL_KEYS.items() if v[1] <= time.time()]:
+            _MAIL_KEYS.pop(k, None)
+        _MAIL_KEYS[_mail_token(handler)] = (passphrase, time.time() + _SESSION_TTL)
+
+
+def _mail_clear_key(handler) -> None:
+    with _MAIL_LOCK:
+        _MAIL_KEYS.pop(_mail_token(handler), None)
 
 
 def _local_ip(ip: str) -> bool:
@@ -461,6 +650,9 @@ def _is_authed(handler) -> bool:
 
 
 def _login_page(msg: str = "") -> str:
+    """The account gate. If no account exists yet, this IS the guided onboarding
+    (create account + optional email). Once an account exists, it's the unlock form.
+    Either way, guests never see this for search/health/help — only personal data."""
     initd = True
     try:
         from ghosted import vault
@@ -468,24 +660,384 @@ def _login_page(msg: str = "") -> str:
         initd = vault.is_initialized()
     except Exception:
         pass
-    note = (
-        ""
-        if initd
-        else '<div class="tag">no master password set yet — run <b>login</b> in the console first</div>'
-    )
     err = (
-        f'<div class="tag" style="color:#ff8aa0">{html.escape(msg)}</div>'
-        if msg
-        else ""
+        f'<div class="tag" style="color:#ff8aa0">{html.escape(msg)}</div>' if msg else ""
     )
-    return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>Ghosted — unlock</title><style>{_CSS}</style></head><body>
+    if not initd:
+        # First-run: set up the account holder right here on the website.
+        return f"""<!doctype html><html><head><meta charset="utf-8">
+<title>Ghosted — create account</title><style>{_CSS}</style></head><body>
 <div class="logo">🐰 <b>Ghosted</b></div>
-<div class="tag">remote access — unlock with your master password</div>
-<form action="/login" method="post" autocomplete="off">
+<div class="tag">create your account — opens your private vault, mail & mesh</div>
+<form action="/setup" method="post" autocomplete="off" class="acct" style="text-align:center">
+  <input type="text" name="display_name" placeholder="your display name (shown when signed in)" autofocus>
+  <input type="password" name="pw" placeholder="create a master password (min 12 characters)">
+  <input type="password" name="pw2" placeholder="confirm master password">
+  <input type="text" name="email" placeholder="your email(s), comma-separated — blank uses @{PUBLIC_DOMAIN}">
+  <div class="btns"><button type="submit">Create account</button></div>
+  <div class="muted">Guests can search, check health & use every capability without an
+   account. An account only unlocks <b>your</b> private data. Add 2FA factors next on your
+   account page (authenticator/QR, text, location, recovery).</div>
+</form>{err}
+</body></html>"""
+    # Account exists → multi-factor sign-in: master password + the enrolled factors.
+    try:
+        from ghosted import mfa
+
+        enrolled = set(mfa.enrolled())
+    except Exception:
+        enrolled = set()
+    fields = ""
+    if "authenticator" in enrolled:
+        fields += '<input type="text" name="authenticator" placeholder="authenticator 6-digit code" autocomplete="off">'
+    if "email" in enrolled:
+        fields += '<input type="text" name="email" placeholder="email code (use “Send email code”)" autocomplete="off">'
+    if "phone" in enrolled:
+        fields += '<input type="text" name="phone" placeholder="text-message code (use “Send text code”)" autocomplete="off">'
+    if "recovery" in enrolled:
+        fields += '<input type="text" name="recovery" placeholder="recovery code (optional)" autocomplete="off">'
+    loc = ('<div class="muted">your trusted-location factor verifies automatically from this network</div>'
+           if "location" in enrolled else "")
+    send = ""
+    if "email" in enrolled:
+        send += '<button type="submit" name="send" value="email">Send email code</button>'
+    if "phone" in enrolled:
+        send += '<button type="submit" name="send" value="phone">Send text code</button>'
+    policy = ('<div class="muted">two factors required (password + 2)</div>'
+              if len(enrolled) >= 2 else
+              '<div class="muted">add more factors in your account for full protection</div>')
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<title>Ghosted — sign in</title><style>{_CSS}</style></head><body>
+<div class="logo">🐰 <b>Ghosted</b></div>
+<div class="tag">sign in — master password + your factors</div>
+<form action="/login" method="post" autocomplete="off" class="acct" style="text-align:center">
   <input type="password" name="pw" placeholder="master password" autofocus>
-  <div class="btns"><button type="submit">Unlock</button></div>
-</form>{note}{err}
+  {fields}{loc}
+  <div class="btns">{send}<button type="submit" name="submit" value="1">Sign in</button></div>
+  {policy}
+</form>
+<div class="tag"><a href="/" style="color:#9aa9ff;text-decoration:none">← back to search (no account needed)</a></div>{err}
+</body></html>"""
+
+
+def _health_page(ctx: dict | None = None) -> str:
+    """Device health monitor — public capability (a guest can read machine vitals,
+    but never personal data). Renders one snapshot() with coloured states."""
+    ctx = ctx or {"authed": False, "name": "", "accent": "#9aa9ff", "notes": 0}
+    try:
+        from ghosted import health
+
+        snap = health.snapshot()
+    except Exception as e:  # never 500
+        return f"<h1>health unavailable</h1><p>{html.escape(str(e))}</p>"
+
+    def card(label: str, value: str, state) -> str:
+        cls = f"s-{state}" if state else "s-none"
+        return (
+            f'<div class="hcard"><span class="hl">{html.escape(label)}</span>'
+            f'<span class="hv {cls}">{value}</span></div>'
+        )
+
+    cpu, mem, dsk = snap["cpu"], snap["memory"], snap["disk"]
+    bat, up, net, sec = snap["battery"], snap["uptime"], snap["network"], snap["security"]
+    cards = [
+        card("CPU", f'{cpu.get("percent")}%' if cpu.get("percent") is not None else "—", cpu.get("state")),
+        card("Memory", f'{mem.get("percent")}%  ({mem.get("used_gb")}/{mem.get("total_gb")} GB)' if mem.get("percent") is not None else "—", mem.get("state")),
+        card("Disk", f'{dsk.get("percent")}%  ({dsk.get("free_gb")} GB free)' if dsk.get("percent") is not None else "—", dsk.get("state")),
+    ]
+    if bat.get("present"):
+        cards.append(card("Battery", f'{bat.get("percent")}%  {"plugged" if bat.get("plugged") else "on battery"}', bat.get("state")))
+    cards.append(card("Uptime", up.get("human", "—"), "none"))
+    cards.append(card("Network", "online" if net.get("online") else ("offline" if net.get("online") is False else "—"), net.get("state")))
+    cards.append(card("Security (EDR)", str(sec.get("edr", "—")), sec.get("state")))
+    cards.append(card("Egress IP", html.escape(str(sec.get("egress_ip", "—"))), "none"))
+    overall = snap.get("overall", "unknown")
+    ocls = {"healthy": "s-ok", "degraded": "s-warn", "critical": "s-critical"}.get(overall, "s-none")
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Health</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:40px;margin-top:64px">🩺 <b>Device Health</b></div>
+<div class="tag">overall: <span class="{ocls}">{overall}</span> · live machine vitals</div>
+<div class="health">{"".join(cards)}</div>
+<div class="tag"><a href="/" style="color:#9aa9ff;text-decoration:none">← search</a></div>
+</body></html>"""
+
+
+def _account_page(ctx: dict | None = None) -> str:
+    """The account holder's full account-info page: all personal data + history +
+    statistical use, plus preferences, optional notifications, and multi-factor setup."""
+    ctx = ctx or {"authed": True, "name": "", "accent": "#9aa9ff", "notes": 0}
+    from ghosted import feedback, mail, mfa, notifications, preferences
+
+    prefs = preferences.all()
+    fb = feedback.summary()
+    hist = feedback.recent_queries(limit=15)
+    status = mfa.status()
+    enrolled = set(status["enrolled"])
+    notes = notifications.collect()
+
+    sovereign = mail.address("me")
+
+    def _rm(action, key, val, label="remove"):
+        return (f'<form action="/account" method="post" style="display:inline;float:right">'
+                f'<input type="hidden" name="action" value="{action}">'
+                f'<input type="hidden" name="{key}" value="{html.escape(val)}">'
+                f'<button type="submit" style="padding:2px 9px;font-size:11px;margin:0">{label}</button></form>')
+
+    ids = mail.identities()
+    accts = mail.accounts()
+    id_rows = "".join(
+        f'<div class="row">{html.escape(a)}'
+        + ('' if a == sovereign else _rm("remove_identity", "email", a))
+        + '</div>'
+        for a in ids
+    )
+    def acct_block(a, c):
+        saved = "🔑 password saved" if c.get("pw_blob") else "no saved password"
+        return (
+            f'<div class="row">{html.escape(a)} — {html.escape(c.get("protocol",""))} '
+            f'{html.escape(c.get("host",""))}:{c.get("port","")} '
+            f'<span class="muted">· {saved}</span>' + _rm("remove_account", "email", a) + '</div>'
+            f'<form action="/account" method="post"><input type="hidden" name="action" value="set_account_pw">'
+            f'<input type="hidden" name="email" value="{html.escape(a)}">'
+            f'<input type="password" name="password" placeholder="email password (save or change)">'
+            f'<input type="password" name="pw" placeholder="your master password (to encrypt it)">'
+            f'<div class="btns"><button type="submit">Save / change email password</button></div></form>'
+        )
+
+    acct_rows = "".join(acct_block(a, c) for a, c in accts.items()) \
+        or '<div class="row muted">no external accounts configured</div>'
+
+    def factor_row(f, label):
+        on = f in enrolled
+        if on:
+            return (f'<div class="row">{label} — <span class="s-ok">✓ enrolled</span>'
+                    + _rm("remove_factor", "factor", f, "disable") + '</div>')
+        return f'<div class="row">{label} — <span class="muted">not set</span></div>'
+
+    factors = (
+        factor_row("authenticator", "Authenticator (QR / TOTP)")
+        + factor_row("email", "Email code")
+        + factor_row("phone", "Text message (SMS)")
+        + factor_row("location", "Trusted location")
+        + factor_row("recovery", "Recovery codes")
+    )
+    policy_note = (
+        f'<div class="row muted">policy: {status["policy"]} · '
+        f'{status["count"]} factor(s) enrolled · '
+        + ("satisfiable ✓" if status["satisfiable"] else "enroll more to reach two") + "</div>"
+    )
+    stats = (
+        f'<div class="row">searches: <b>{fb["searches"]}</b> · clicks: <b>{fb["clicks"]}</b> · '
+        f'ratings: <b>{fb["ratings"]}</b> · learned: <b>{fb["learned_pairs"]}</b> · '
+        f'adaptivity: <b>{fb["adaptivity"]}</b></div>'
+    )
+    hist_rows = "".join(
+        f'<div class="row"><a href="/search?q={quote(q)}" style="color:#9aa9ff;text-decoration:none">{html.escape(q)}</a></div>'
+        for q in reversed(hist)
+    ) or '<div class="row muted">no recent searches</div>'
+    note_rows = "".join(
+        f'<div class="row {("s-warn" if n["level"]=="warn" else "s-critical" if n["level"]=="critical" else "")}">'
+        f'{html.escape(n["text"])} '
+        f'<a href="/account" onclick="fetch(\'/note/dismiss?id={quote(n["id"])}\',{{method:\'POST\'}}).then(()=>location.reload());return false" '
+        f'style="color:#6f7aa0;float:right">dismiss</a></div>'
+        for n in notes
+    ) or '<div class="row muted">no notifications' + ('' if prefs["notifications"] else ' (turn them on below)') + '</div>'
+
+    def opt(sel_val, val, text):
+        return f'<option value="{val}"{" selected" if sel_val==val else ""}>{text}</option>'
+
+    accents = "".join(opt(prefs["accent"], a, a) for a in preferences.ACCENTS)
+
+    def chk(key):
+        return "checked" if prefs.get(key) else ""
+
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Account</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:34px;margin-top:64px">👤 <b>{html.escape(prefs["display_name"] or "Your account")}</b></div>
+<div class="tag">all your personal data, history &amp; usage — private to you</div>
+<div class="btns" style="margin:6px 0 4px"><button onclick="location.href='/mail'">✉ Open your mailbox</button>
+ <button onclick="location.href='/'">🏠 Home</button></div>
+<div class="acct">
+  <div class="muted" style="margin-bottom:6px">Tip: edit a field and press its Save button. Use “remove”/“disable” to update entries.</div>
+  <h3>Profile</h3>
+  <form action="/account" method="post"><input type="hidden" name="action" value="save_prefs">
+   <input type="text" name="display_name" value="{html.escape(prefs['display_name'])}" placeholder="display name">
+   <div class="row">Accent <select name="accent">{accents}</select></div>
+   <div class="row"><label><input type="checkbox" name="notifications" {chk('notifications')}> Enable notifications (optional)</label></div>
+   <div class="row muted">notify about:
+     <label><input type="checkbox" name="notify_health" {chk('notify_health')}> health</label>
+     <label><input type="checkbox" name="notify_mail" {chk('notify_mail')}> mail</label>
+     <label><input type="checkbox" name="notify_suggestions" {chk('notify_suggestions')}> suggestions</label></div>
+   <div class="row"><label><input type="checkbox" name="voice_autoread" {chk('voice_autoread')}> Lola auto-reads results</label>
+     &nbsp; <label><input type="checkbox" name="show_badges" {chk('show_badges')}> show relevance badges</label></div>
+   <div class="btns"><button type="submit">Save preferences</button></div></form>
+
+  <h3 id="notifications">Notifications</h3>{note_rows}
+
+  <h3>Two-factor authentication <span class="muted">(password + 2 factors required)</span></h3>{factors}{policy_note}
+  <form action="/account" method="post"><input type="hidden" name="action" value="enroll_authenticator">
+   <input type="password" name="pw" placeholder="master password (to secure the secret)">
+   <div class="btns"><button type="submit">Set up authenticator (get QR)</button></div></form>
+  <form action="/account" method="post"><input type="hidden" name="action" value="enroll_phone">
+   <input type="text" name="number" placeholder="mobile number for text codes">
+   <input type="text" name="carrier" placeholder="carrier (att, tmobile, verizon, …)">
+   <div class="btns"><button type="submit">Enroll text message</button></div></form>
+  <form action="/account" method="post"><input type="hidden" name="action" value="enroll_location">
+   <div class="muted">Trust this network as a location factor.</div>
+   <div class="btns"><button type="submit">Trust this location</button></div></form>
+  <form action="/account" method="post"><input type="hidden" name="action" value="enroll_recovery">
+   <input type="password" name="pw" placeholder="master password (to secure the codes)">
+   <div class="btns"><button type="submit">Generate recovery codes</button></div></form>
+
+  <h3>Identities</h3>{id_rows}
+  <form action="/account" method="post"><input type="hidden" name="action" value="add_identity">
+   <input type="text" name="email" placeholder="add an email identity you own (used for email codes)">
+   <div class="btns"><button type="submit">Add identity</button></div></form>
+
+  <h3>External email accounts</h3>{acct_rows}
+  <form action="/account" method="post"><input type="hidden" name="action" value="add_account">
+   <input type="text" name="email" placeholder="email address">
+   <input type="text" name="protocol" placeholder="protocol: imap / pop / smtp (default imap)">
+   <input type="text" name="host" placeholder="server host (e.g. imap.gmail.com)">
+   <input type="text" name="port" placeholder="port (blank = default)">
+   <input type="password" name="password" placeholder="email password (optional — saved encrypted)">
+   <input type="password" name="pw" placeholder="your master password (only if saving the email password)">
+   <div class="muted">Leave the email password blank to enter it per fetch. If you fill it in, it's
+    sealed with GHOSTED-CIPHER-1 under your master password — you can change or remove it anytime.</div>
+   <div class="btns"><button type="submit">Save email account</button></div></form>
+
+  <h3>Usage statistics</h3>{stats}
+  <h3>Recent search history</h3>{hist_rows}
+
+  <div class="tag" style="margin-top:18px"><a href="/" style="color:#9aa9ff;text-decoration:none">← search</a>
+   &nbsp;·&nbsp; <a href="/logout" style="color:#9aa9ff;text-decoration:none">sign out</a></div>
+</div>
+</body></html>"""
+
+
+def _qr_page(enrollment: dict, ctx: dict | None = None) -> str:
+    """Shown once right after authenticator enrollment — the QR + secret + recovery."""
+    ctx = ctx or {"authed": True, "accent": "#9aa9ff"}
+    try:
+        from ghosted import qrcode
+
+        qr = qrcode.svg(enrollment.get("uri", ""))
+    except Exception:
+        qr = "<p>(QR unavailable — use the secret below)</p>"
+    secret = html.escape(enrollment.get("secret", ""))
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Authenticator</title>
+<style>{_CSS}</style></head><body>
+<div class="logo" style="font-size:32px;margin-top:60px">🔐 <b>Scan this QR</b></div>
+<div class="tag">scan with your authenticator app — or type the secret below</div>
+<div style="background:#fff;padding:14px;border-radius:12px;margin:14px">{qr}</div>
+<div class="acct" style="text-align:center">
+  <div class="row">secret: <b>{secret}</b></div>
+  <div class="muted">After scanning, your authenticator generates the 6-digit codes used at sign-in.</div>
+  <div class="tag"><a href="/account" style="color:#9aa9ff;text-decoration:none">← back to account</a></div>
+</div>
+</body></html>"""
+
+
+def _codes_page(codes: list, ctx: dict | None = None) -> str:
+    """Shown once after generating recovery codes — store them safely (one-time use)."""
+    rows = "".join(f'<div class="row"><b>{html.escape(c)}</b></div>' for c in codes)
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Recovery codes</title>
+<style>{_CSS}</style></head><body>
+<div class="logo" style="font-size:30px;margin-top:60px">🗝 <b>Recovery codes</b></div>
+<div class="tag">store these safely — each works once if you lose a factor</div>
+<div class="acct" style="text-align:center">{rows}
+<div class="tag"><a href="/account" style="color:#9aa9ff;text-decoration:none">← back to account</a></div></div>
+</body></html>"""
+
+
+def _mail_unlock_page(ctx: dict, msg: str = "") -> str:
+    err = f'<div class="tag" style="color:#ff8aa0">{html.escape(msg)}</div>' if msg else ""
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Mail</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:32px;margin-top:64px">✉ <b>Your mail</b></div>
+<div class="tag">enter your passphrase to open your black-box mailbox</div>
+<form action="/mail" method="post" autocomplete="off" class="acct" style="text-align:center">
+  <input type="hidden" name="action" value="unlock">
+  <input type="password" name="pw" placeholder="mailbox passphrase (your master password)" autofocus>
+  <div class="btns"><button type="submit">Open mailbox</button></div>
+</form>{err}
+</body></html>"""
+
+
+def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
+    """The webmail client: inbox, read, compose/send, and IMAP/POP receive."""
+    from ghosted import mail
+
+    boxes = mail.inbox()
+    note = f'<div class="tag" style="color:#7bd88f">{html.escape(msg)}</div>' if msg else ""
+    reading = ""
+    if 0 <= read_idx < len(boxes):
+        try:
+            m = mail.read(boxes[read_idx], pw)
+            reading = (
+                '<div class="acct"><h3>Message</h3>'
+                f'<div class="row">from: <b>{html.escape(str(m.get("from","")))}</b></div>'
+                f'<div class="row">to: {html.escape(str(m.get("to","")))}</div>'
+                f'<div class="row">subject: <b>{html.escape(str(m.get("subject","")))}</b></div>'
+                f'<div class="row" style="white-space:pre-wrap">{html.escape(str(m.get("body","")))}</div>'
+                '<div class="tag"><a href="/mail" style="color:#9aa9ff;text-decoration:none">← inbox</a></div></div>'
+            )
+        except Exception:
+            reading = '<div class="acct"><div class="row muted">cannot open this message with your key</div></div>'
+    rows = []
+    for i, path in list(enumerate(boxes))[::-1][:60]:
+        try:
+            m = mail.read(path, pw)
+            frm = html.escape(str(m.get("from", ""))[:40])
+            subj = html.escape(str(m.get("subject", "(no subject)"))[:80])
+            rows.append(f'<div class="row"><a href="/mail?id={i}" style="color:#9aa9ff;text-decoration:none">'
+                        f'<b>{subj}</b> <span class="muted">— {frm}</span></a></div>')
+        except Exception:
+            rows.append('<div class="row muted">🔒 sealed (different key)</div>')
+    inbox_rows = "".join(rows) or '<div class="row muted">inbox empty</div>'
+    accts = "".join(f'<option value="{html.escape(a)}">{html.escape(a)}</option>' for a in mail.accounts())
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Mail</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:30px;margin-top:64px">✉ <b>Your mail</b></div>
+<div class="tag">black-box mailbox · send · receive · read — private to you</div>{note}
+{reading}
+<div class="acct">
+  <h3>Compose</h3>
+  <form action="/mail" method="post"><input type="hidden" name="action" value="send">
+   <input type="text" name="to" placeholder="to (peer @sovereign.dmn or external address)">
+   <input type="text" name="subject" placeholder="subject">
+   <textarea name="body" placeholder="message" style="width:100%;min-height:120px;margin:6px 0;padding:11px 14px;border-radius:10px;border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#fff"></textarea>
+   <div class="row"><label><input type="radio" name="mode" value="sovereign" checked> sovereign / mesh</label>
+     &nbsp; <label><input type="radio" name="mode" value="external"> external SMTP</label></div>
+   <div class="muted">External SMTP (optional): from / host / port / username / password (used once, never stored)</div>
+   <input type="text" name="from_addr" placeholder="from address (external)">
+   <input type="text" name="smtp_host" placeholder="smtp host (e.g. smtp.gmail.com)">
+   <input type="text" name="smtp_port" placeholder="smtp port (587)">
+   <input type="text" name="smtp_user" placeholder="smtp username">
+   <input type="password" name="smtp_pass" placeholder="smtp password (one-time)">
+   <div class="btns"><button type="submit">Send</button></div></form>
+
+  <h3>Inbox</h3>{inbox_rows}
+
+  <h3>Receive external mail (IMAP / POP)</h3>
+  <form action="/mail" method="post"><input type="hidden" name="action" value="pull">
+   <input type="text" name="host" placeholder="imap/pop host (e.g. imap.gmail.com)">
+   <input type="text" name="username" placeholder="username / email">
+   <input type="password" name="password" placeholder="password (blank = use your saved email password)">
+   <input type="text" name="port" placeholder="port (993 imap / 995 pop)">
+   <div class="row"><label><input type="radio" name="proto" value="imap" checked> IMAP</label>
+     <label><input type="radio" name="proto" value="pop"> POP</label></div>
+   <div class="muted">Leave the password blank to use the encrypted email password saved on your account.</div>
+   <div class="btns"><button type="submit">Fetch into mailbox</button></div></form>
+
+  <div class="tag" style="margin-top:14px"><a href="/" style="color:#9aa9ff;text-decoration:none">🏠 Home</a>
+   &nbsp;·&nbsp; <a href="/account" style="color:#9aa9ff;text-decoration:none">account &amp; email settings</a>
+   &nbsp;·&nbsp; <a href="/mail?lock=1" style="color:#9aa9ff;text-decoration:none">lock mailbox</a></div>
+</div>
 </body></html>"""
 
 
@@ -510,7 +1062,8 @@ def _help_page() -> str:
     )
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Help</title>
 <style>{_CSS}</style>{extra}</head><body>
-<div class="logo" style="font-size:40px;margin-top:7vh">🐰 <b>Ghosted</b> Help</div>
+<div class="toolbar"><button onclick="location.href='/'" title="Home">🏠 Home</button></div>
+<div class="logo" style="font-size:40px;margin-top:64px">🐰 <b>Ghosted</b> Help</div>
 <div class="tag">everything the app does</div>
 <div class="help">{body}<div class="hd" style="margin-top:24px">{html.escape(help_text.CAPABILITIES)}</div></div>
 </body></html>"""
@@ -533,7 +1086,29 @@ class _Handler(BaseHTTPRequestHandler):
         if not _gojo_admits(self.client_address[0], parsed.path):
             self._send("<h1>403 — Gojo boundary denied</h1>", 403)
             return
-        if parsed.path == "/logout":
+        path = parsed.path
+        ctx = _ctx(self)
+        # ── PUBLIC capability routes ──────────────────────────────────────────────
+        # Open use: full capabilities for everyone (guests on any connection). Personal
+        # data is never served here — only the app's public capabilities.
+        if path in ("/", "/index.html"):
+            self._send(_home_page(ctx))
+            return
+        if path == "/search":
+            q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
+            self._send(_home_page(ctx) if not q else _results_page(q, ctx))
+            return
+        if path == "/help":
+            self._send(_help_page())
+            return
+        if path == "/health":
+            self._send(_health_page(ctx))
+            return
+        if path == "/favicon.ico":
+            self._send_icon()
+            return
+        # ── PERSONAL routes — account holder only ─────────────────────────────────
+        if path == "/logout":
             with _SESSIONS_LOCK:
                 _SESSIONS.pop(_cookie_token(self), None)
             self.send_response(303)
@@ -541,78 +1116,402 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Location", "/")
             self.end_headers()
             return
-        if not _is_authed(self):
-            self._send(_login_page())  # remote + not unlocked → master-password gate
+        if path == "/account":
+            from ghosted import vault
+
+            # Managing an account requires the account to EXIST (a master password set).
+            # Not initialized → onboarding; authed + initialized → dashboard; else unlock.
+            if ctx["authed"] and vault.is_initialized():
+                self._send(_account_page(ctx))
+            else:
+                self._send(_login_page())
             return
-        if parsed.path in ("/", "/index.html"):
-            self._send(_home_page())
-        elif parsed.path == "/search":
-            q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
-            self._send(_home_page() if not q else _results_page(q))
-        elif parsed.path == "/help":
-            self._send(_help_page())
-        else:
-            self._send("<h1>404</h1>", 404)
+        if path == "/mail":
+            from ghosted import vault
+
+            if not ctx["authed"] or not vault.is_initialized():
+                self._send(_login_page())  # no account yet → create one first
+                return
+            q = parse_qs(parsed.query)
+            if q.get("lock"):
+                _mail_clear_key(self)
+                self._send(_mail_unlock_page(ctx, "mailbox locked"))
+                return
+            pw = _mail_get_key(self)
+            if not pw:
+                self._send(_mail_unlock_page(ctx))
+                return
+            try:
+                rid = int((q.get("id") or ["-1"])[0])
+            except ValueError:
+                rid = -1
+            self._send(_mail_page(ctx, pw, rid))
+            return
+        self._send("<h1>404</h1>", 404)
+
+    def _send_icon(self) -> None:
+        """Serve the bundled ghost-rabbit icon as the favicon; 204 if not found."""
+        try:
+            import sys as _sys
+
+            base = getattr(_sys, "_MEIPASS", None) or os.path.dirname(__file__)
+            for cand in (
+                os.path.join(base, "ghost_rabbit.ico"),
+                os.path.join(base, "assets", "ghost_rabbit.ico"),
+                os.path.join(os.path.dirname(base), "assets", "ghost_rabbit.ico"),
+            ):
+                if os.path.exists(cand):
+                    with open(cand, "rb") as fh:
+                        data = fh.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/x-icon")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+        except Exception:
+            pass
+        self.send_response(204)
+        self.end_headers()
+
+    def _read_body(self, cap: int = 64 * 1024) -> str | None:
+        """Read the request body with a size cap (anti memory-DoS). None on error."""
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            self._send("<h1>400 — bad Content-Length</h1>", 400)
+            return None
+        if length > cap:
+            self._send("<h1>413 — request too large</h1>", 413)
+            return None
+        return self.rfile.read(length).decode("utf-8", "replace") if length else ""
+
+    def _grant_session(self) -> None:
+        """Mint a session cookie and redirect home (shared by login + first-run setup)."""
+        tok = secrets.token_urlsafe(32)
+        now = time.time()
+        with _SESSIONS_LOCK:
+            for _k in [k for k, v in _SESSIONS.items() if v <= now]:
+                _SESSIONS.pop(_k, None)
+            if len(_SESSIONS) >= _SESSIONS_MAX:
+                _SESSIONS.clear()
+            _SESSIONS[tok] = now + _SESSION_TTL
+        self.send_response(303)
+        self.send_header(
+            "Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict"
+        )
+        self.send_header("Location", "/account")
+        self.end_headers()
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if not _gojo_admits(self.client_address[0], parsed.path):
             self._send("<h1>403 — Gojo boundary denied</h1>", 403)
             return
-        if parsed.path == "/login":
-            client = self.client_address[0] if self.client_address else ""
-            now = time.time()
-            with _SESSIONS_LOCK:  # brute-force lockout per source IP
-                cnt, start = _LOGIN_FAILS.get(client, (0, now))
-                if now - start > _LOGIN_WINDOW:
-                    cnt, start = 0, now
-                if cnt >= _LOGIN_MAX:
-                    self._send("<h1>429 — too many attempts, slow down</h1>", 429)
-                    return
-            try:
-                length = int(self.headers.get("Content-Length", "0") or 0)
-            except ValueError:
-                self._send("<h1>400 — bad Content-Length</h1>", 400)
-                return
-            if length > 64 * 1024:  # a login body is < 1KB; cap to stop memory-DoS
-                self._send("<h1>413 — request too large</h1>", 413)
-                return
-            body = self.rfile.read(length).decode("utf-8", "replace") if length else ""
-            pw = (parse_qs(body).get("pw") or [""])[0]
-            ok = False
-            try:
-                from ghosted import vault
+        path = parsed.path
+        # ── public feedback beacons — every interaction is a data point ───────────
+        if path in ("/fb/click", "/fb/dwell", "/fb/rate"):
+            self._handle_feedback(path)
+            return
+        if path == "/login":
+            self._handle_login()
+            return
+        if path == "/setup":
+            self._handle_setup()
+            return
+        if path == "/account":
+            self._handle_account_post()
+            return
+        if path == "/note/dismiss":
+            self._handle_note_dismiss()
+            return
+        if path == "/mail":
+            self._handle_mail_post()
+            return
+        self._send("<h1>404</h1>", 404)
 
-                ok = vault.login(pw)
-            except Exception:
-                ok = False
-            with _SESSIONS_LOCK:  # record the attempt
-                if ok:
-                    _LOGIN_FAILS.pop(client, None)
-                else:
-                    c, s = _LOGIN_FAILS.get(client, (0, now))
-                    if now - s > _LOGIN_WINDOW:
-                        c, s = 0, now
-                    _LOGIN_FAILS[client] = (c + 1, s)
-            if ok:
-                tok = secrets.token_urlsafe(32)
-                now = time.time()
-                with _SESSIONS_LOCK:
-                    for _k in [k for k, v in _SESSIONS.items() if v <= now]:
-                        _SESSIONS.pop(_k, None)  # prune expired
-                    if len(_SESSIONS) >= _SESSIONS_MAX:
-                        _SESSIONS.clear()  # hard cap
-                    _SESSIONS[tok] = now + _SESSION_TTL
+    def _handle_mail_post(self) -> None:
+        ctx = _ctx(self)
+        if not ctx["authed"]:
+            self._send(_login_page())
+            return
+        body = self._read_body(cap=512 * 1024)
+        if body is None:
+            return
+        form = parse_qs(body)
+        g = lambda k, d="": (form.get(k) or [d])[0]  # noqa: E731
+        action = g("action")
+        from ghosted import mail, vault
+
+        if action == "unlock":
+            pw = g("pw")
+            if not vault.is_initialized():
+                self._send(_login_page("no account yet — create one to set your password"))
+                return
+            if vault.login(pw):
+                _mail_set_key(self, pw)
                 self.send_response(303)
-                self.send_header(
-                    "Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict"
-                )
-                self.send_header("Location", "/")
+                self.send_header("Location", "/mail")
                 self.end_headers()
             else:
-                self._send(_login_page("wrong password"))
+                self._send(_mail_unlock_page(ctx, "wrong passphrase"))
+            return
+        pw = _mail_get_key(self)
+        if not pw:
+            self._send(_mail_unlock_page(ctx))
+            return
+        msg = ""
+        try:
+            if action == "send":
+                to, subject, mbody = g("to").strip(), g("subject"), g("body")
+                if g("mode") == "external" and g("smtp_host"):
+                    from ghosted import bridge
+
+                    port_s = g("smtp_port")
+                    bridge.send_external(
+                        to, subject, mbody,
+                        from_addr=g("from_addr") or mail.address("me"),
+                        smtp_host=g("smtp_host"),
+                        smtp_port=int(port_s) if port_s.isdigit() else 587,
+                        username=g("smtp_user") or None,
+                        password=g("smtp_pass") or None,
+                    )
+                    msg = f"sent externally to {to}"
+                else:
+                    mail.send(to, subject, mbody, pw)
+                    msg = f"sealed + sent to {to} (sovereign / mesh)"
+            elif action == "pull":
+                from ghosted import imap_pull
+
+                host, user, pwd = g("host"), g("username"), g("password")
+                if not pwd:  # fall back to a saved (encrypted) email password
+                    for addr, c in mail.accounts().items():
+                        if user.lower() in (addr, c.get("username", "").lower()) or c.get("host") == host:
+                            saved = mail.account_password(addr, pw)
+                            if saved:
+                                pwd = saved
+                                break
+                port_s = g("port")
+                if g("proto") == "pop":
+                    r = imap_pull.pull_pop(host, user, pwd, pw,
+                                           port=int(port_s) if port_s.isdigit() else 995)
+                else:
+                    r = imap_pull.pull_imap(host, user, pwd, pw,
+                                            port=int(port_s) if port_s.isdigit() else 993)
+                msg = f"fetched {r.get('sealed', 0)} message(s) into your mailbox"
+        except Exception as e:  # noqa: BLE001 — surface the error, never 500
+            msg = f"error: {type(e).__name__}: {e}"
+        self._send(_mail_page(ctx, pw, -1, msg))
+
+    def _record_fail(self, client: str, now: float) -> None:
+        with _SESSIONS_LOCK:
+            c, s = _LOGIN_FAILS.get(client, (0, now))
+            if now - s > _LOGIN_WINDOW:
+                c, s = 0, now
+            _LOGIN_FAILS[client] = (c + 1, s)
+
+    def _handle_login(self) -> None:
+        client = self.client_address[0] if self.client_address else ""
+        now = time.time()
+        with _SESSIONS_LOCK:  # brute-force lockout per source IP
+            cnt, start = _LOGIN_FAILS.get(client, (0, now))
+            if now - start > _LOGIN_WINDOW:
+                cnt, start = 0, now
+            if cnt >= _LOGIN_MAX:
+                self._send("<h1>429 — too many attempts, slow down</h1>", 429)
+                return
+        body = self._read_body()
+        if body is None:
+            return
+        form = parse_qs(body)
+        pw = (form.get("pw") or [""])[0]
+        from ghosted import mfa, vault
+
+        # Master password (first means of identification) must verify before anything.
+        try:
+            pw_ok = vault.login(pw)
+        except Exception:
+            pw_ok = False
+        if not pw_ok:
+            self._record_fail(client, now)
+            self._send(_login_page("wrong password"))
+            return
+        # "Send code" for a delivery factor (email / text) → challenge, then re-prompt.
+        send = (form.get("send") or [""])[0].strip()
+        if send in ("email", "phone"):
+            ch = mfa.challenge(send, pw)
+            if ch.get("shown"):
+                msg = f"offline — your {send} code is {ch['shown']}"
+            else:
+                msg = f"code sent via {ch.get('via', send)} — enter it below"
+            self._send(_login_page(msg))
+            return
+        # Second + third means: collect factor proofs and validate (location auto).
+        proofs = {f: (form.get(f) or [""])[0].strip()
+                  for f in ("authenticator", "email", "phone", "recovery")
+                  if (form.get(f) or [""])[0].strip()}
+        result = mfa.validate(pw, proofs, client_ip=client)
+        if result["ok"]:
+            with _SESSIONS_LOCK:
+                _LOGIN_FAILS.pop(client, None)
+            self._grant_session()
         else:
-            self._send("<h1>404</h1>", 404)
+            self._record_fail(client, now)
+            passed = ", ".join(result["passed"]) or "none"
+            self._send(_login_page(
+                f"two factors required — passed: {passed} (need {result['required']})"))
+
+    def _handle_setup(self) -> None:
+        """First-run account creation from the website. Only allowed when no account
+        exists yet (or the caller is already authed) — never a way to reset someone."""
+        from ghosted import vault
+
+        if vault.is_initialized() and not _is_authed(self):
+            self._send(_login_page("account already exists — sign in"))
+            return
+        body = self._read_body()
+        if body is None:
+            return
+        form = parse_qs(body)
+        pw = (form.get("pw") or [""])[0]
+        pw2 = (form.get("pw2") or [""])[0]
+        name = (form.get("display_name") or [""])[0].strip()
+        emails = [e.strip() for e in (form.get("email") or [""])[0].replace(";", ",").split(",") if e.strip()]
+        if not vault.is_initialized():
+            if not pw or pw != pw2:
+                self._send(_login_page("passwords empty or did not match"))
+                return
+            try:
+                vault.initialize(pw)
+            except Exception as e:  # noqa: BLE001
+                self._send(_login_page(f"could not create account: {e}"))
+                return
+        try:
+            if name:
+                from ghosted import preferences
+
+                preferences.set("display_name", name)
+            if emails:
+                from ghosted import mail, mfa
+
+                for e in emails:
+                    try:
+                        mail.add_identity(e)
+                    except Exception:
+                        pass
+                mfa.enroll("email", pw, addrs=emails)  # email factor for 2FA
+        except Exception:
+            pass
+        self._grant_session()
+
+    def _handle_account_post(self) -> None:
+        if not _is_authed(self):
+            self._send(_login_page())
+            return
+        body = self._read_body()
+        if body is None:
+            return
+        form = parse_qs(body)
+        action = (form.get("action") or [""])[0]
+        g = lambda k, d="": (form.get(k) or [d])[0].strip()  # noqa: E731
+        from ghosted import mail, mfa, preferences, vault
+
+        # The account must exist before you can manage it — no orphaned factors.
+        if not vault.is_initialized():
+            self._send(_login_page("create your account first (set a master password)"))
+            return
+        # Enrolling a sealed factor requires the REAL master password, so a factor can
+        # never be sealed under a key that doesn't match the vault (the bug that locked
+        # the mailbox: 2FA enrolled while no master password existed).
+        if action in ("enroll_authenticator", "enroll_recovery") and not vault.login(g("pw")):
+            self.send_response(303)
+            self.send_header("Location", "/account")
+            self.end_headers()
+            return
+        try:
+            if action == "save_prefs":
+                # Checkboxes are only present when ticked → absent means False.
+                bools = ("notifications", "notify_health", "notify_mail",
+                         "notify_suggestions", "voice_autoread", "show_badges")
+                vals = {b: (b in form) for b in bools}
+                vals["display_name"] = g("display_name")
+                vals["accent"] = g("accent", "violet")
+                preferences.update(vals)
+            elif action == "enroll_authenticator":
+                en = mfa.enroll("authenticator", g("pw"))
+                if "secret" in en:  # show the QR once (needs the master password to seal)
+                    self._send(_qr_page(en, _ctx(self)))
+                    return
+            elif action == "enroll_phone":
+                mfa.enroll("phone", g("pw"), number=g("number"), carrier=g("carrier"))
+            elif action == "enroll_location":
+                mfa.enroll("location", g("pw"), ip=self.client_address[0] if self.client_address else "")
+            elif action == "enroll_recovery":
+                rc = mfa.enroll("recovery", g("pw"))
+                if rc.get("recovery_codes"):
+                    self._send(_codes_page(rc["recovery_codes"], _ctx(self)))
+                    return
+            elif action == "add_identity":
+                mail.add_identity(g("email"))
+            elif action == "add_account":
+                port_s = g("port")
+                mail.set_account(g("email"), g("protocol", "imap") or "imap",
+                                 g("host"), int(port_s) if port_s.isdigit() else 0, g("email"),
+                                 password=g("password"), master_pw=g("pw"))
+            elif action == "set_account_pw":
+                mail.set_account_password(g("email"), g("password"), g("pw"))
+            elif action == "remove_identity":
+                mail.remove_identity(g("email"))
+            elif action == "remove_account":
+                mail.remove_account(g("email"))
+            elif action == "remove_factor":
+                mfa.remove(g("factor"), g("pw"))
+        except Exception:
+            pass  # bad field → just re-render the dashboard, never 500
+        self.send_response(303)
+        self.send_header("Location", "/account")
+        self.end_headers()
+
+    def _handle_note_dismiss(self) -> None:
+        if not _is_authed(self):
+            self.send_response(403)
+            self.end_headers()
+            return
+        nid = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
+        try:
+            from ghosted import notifications
+
+            notifications.dismiss(nid)
+        except Exception:
+            pass
+        self.send_response(204)
+        self.end_headers()
+
+    def _handle_feedback(self, path: str) -> None:
+        """Record a click / dwell / rating beacon, then 204. Public + best-effort:
+        all input is a data point, but a malformed beacon never errors the client."""
+        body = self._read_body(cap=8 * 1024)
+        if body is None:
+            return
+        try:
+            import json
+
+            data = json.loads(body) if body else {}
+            from ghosted import feedback
+
+            q = str(data.get("q", ""))
+            url = str(data.get("url", ""))
+            if path == "/fb/click":
+                feedback.record_click(q, url, int(data.get("pos", -1)), float(data.get("dwell", 0) or 0))
+            elif path == "/fb/dwell":
+                feedback.record_dwell(q, url, float(data.get("dwell", 0) or 0))
+            elif path == "/fb/rate":
+                feedback.record_rating(q, float(data.get("v", 0) or 0), str(data.get("note", "")), url)
+        except Exception:
+            pass
+        self.send_response(204)
+        self.end_headers()
 
     def log_message(self, *a):  # quiet
         pass

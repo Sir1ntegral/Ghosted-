@@ -24,7 +24,7 @@ ocr = ["rapidocr-onnxruntime"]
 docs = ["pypdf", "python-docx"]
 # Meaning-ranking of search results (homepage + browse). Without it, ranking
 # degrades to lexical + sentiment.
-semantic = ["numpy", "scipy"]
+semantic = ["numpy"]
 build = ["pyinstaller"]
 dev = ["pytest"]
 

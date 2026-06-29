@@ -122,6 +122,103 @@ def identities() -> list:
     return [sovereign] + [a for a in own if a.lower() != sovereign.lower()]
 
 
+# ── external email account settings (server config only — NEVER a password) ────────
+# The setup wizard's "email options". We persist the IMAP/POP/SMTP server settings so
+# the user doesn't retype them, but the PASSWORD is still supplied per pull/send call
+# and is never written to disk (consistent with imap_pull's per-call credential rule).
+def _accounts_path() -> str:
+    return os.path.join(_data_root(), "email_accounts.json")
+
+
+def accounts() -> dict:
+    try:
+        with open(_accounts_path(), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def set_account(
+    addr: str,
+    protocol: str = "imap",
+    host: str = "",
+    port: int = 0,
+    username: str = "",
+    use_ssl: bool = True,
+    password: str = "",
+    master_pw: str = "",
+) -> dict:
+    """Save server settings for an external email address and register it as an identity.
+    The email-access password is OPTIONAL: if you provide it (with your master password),
+    it is sealed with GHOSTED-CIPHER-1 and stored encrypted so you don't retype it; leave
+    it blank to keep the old per-fetch behaviour (entered each time, never stored)."""
+    addr = (addr or "").strip()
+    if not _EMAIL_RE.match(addr):
+        raise ValueError("not a valid email address")
+    protocol = (protocol or "imap").strip().lower()
+    if protocol not in ("imap", "pop", "smtp"):
+        raise ValueError("protocol must be imap, pop, or smtp")
+    if not port:
+        port = {"imap": 993, "pop": 995, "smtp": 465}[protocol]
+    data = accounts()
+    existing = data.get(addr.lower(), {})
+    cfg = {
+        "protocol": protocol,
+        "host": host.strip(),
+        "port": int(port),
+        "username": (username or addr).strip(),
+        "use_ssl": bool(use_ssl),
+        # preserve a previously-saved sealed password unless we're setting a new one
+        "pw_blob": existing.get("pw_blob", ""),
+    }
+    if password and master_pw:
+        cfg["pw_blob"] = _seal({"pw": password}, master_pw)
+    data[addr.lower()] = cfg
+    atomic_write_json(_accounts_path(), data)
+    try:
+        add_identity(addr)
+    except Exception:
+        pass
+    safe = {k: v for k, v in cfg.items() if k != "pw_blob"}
+    safe["password_saved"] = bool(cfg["pw_blob"])
+    return {addr: safe}
+
+
+def set_account_password(addr: str, password: str, master_pw: str) -> bool:
+    """Save or change the (encrypted) email-access password for an account."""
+    data = accounts()
+    cfg = data.get((addr or "").strip().lower())
+    if not cfg:
+        return False
+    cfg["pw_blob"] = _seal({"pw": password}, master_pw) if password else ""
+    data[addr.strip().lower()] = cfg
+    atomic_write_json(_accounts_path(), data)
+    return True
+
+
+def account_password(addr: str, master_pw: str) -> str:
+    """Recover a saved email-access password (empty string if none / wrong key)."""
+    cfg = accounts().get((addr or "").strip().lower(), {})
+    blob = cfg.get("pw_blob")
+    if not blob:
+        return ""
+    try:
+        return _open(blob, master_pw).get("pw", "")
+    except Exception:
+        return ""
+
+
+def remove_account(addr: str) -> bool:
+    addr = (addr or "").strip().lower()
+    data = accounts()
+    if addr in data:
+        data.pop(addr, None)
+        atomic_write_json(_accounts_path(), data)
+        return True
+    return False
+
+
 def _mailbox_dir() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
     d = os.path.join(base, "Ghosted", "mail")
