@@ -172,6 +172,19 @@ def warm() -> None:
         pass
 
 
+def _feedback_boost(query: str, url: str) -> float:
+    """Learned engagement boost for a (query,url) pair. Isolated so a feedback-store
+    hiccup can never break ranking (returns 0.0 on any failure)."""
+    if not url:
+        return 0.0
+    try:
+        from ghosted import feedback
+
+        return feedback.boost(query, url)
+    except Exception:
+        return 0.0
+
+
 def rerank(query: str, results: list):
     """Re-rank web results with surgical precision. Returns the same objects,
     re-ordered, each annotated with _rabbit_score / _rabbit_sentiment / _rabbit_semantic.
@@ -208,12 +221,18 @@ def rerank(query: str, results: list):
                 if (q_intent is not None and _intent_domain(text) == q_intent)
                 else 0.0
             )
-            # blended: meaning (when available) + lexical context + intent + positive tiebreak
+            # learned engagement: results people actually clicked / dwelled on / rated
+            # for this query float up, scaled by how much data the loop has earned
+            # (feedback.adaptivity). No data → 0.0, so this never hurts a cold start.
+            fb_boost = _feedback_boost(query, getattr(r, "url", "") or "")
+            # blended: meaning (when available) + lexical context + intent + positive
+            # tiebreak + learned engagement
             score = (
                 (2.0 * sem if qvec is not None else 0.0)
                 + lex
                 + intent_boost
                 + 0.3 * max(0.0, senti)
+                + fb_boost
             )
             scored.append((score, senti, sem, r))
         scored.sort(key=lambda x: x[0], reverse=True)

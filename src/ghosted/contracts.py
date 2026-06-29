@@ -59,8 +59,35 @@ CONTRACTS: list[tuple[str, str, list[str], str, str | None, str]] = [
      "image OCR in parse", "rapidocr_onnxruntime",
      "without an OCR backend: image text is empty"),
     ("docparse", "ghosted.docparse", ["Maw"],
-     "document extraction in parse", "pypdf",
+     "document extraction in parse", "pypdf+docx",
      "without pypdf/python-docx: pdf/docx degrade; stdlib formats fine"),
+    ("health", "ghosted.health", ["snapshot"],
+     "device health (console `health` + website /health)", None,
+     "pure-Python — CPU/RAM/disk/battery/uptime/network/security via ctypes+stdlib"),
+    ("spellcheck", "ghosted.spellcheck", ["correct"],
+     "smart 'did you mean' search correction", None,
+     "pure-Python — edit-distance over the shipped + learned vocabulary"),
+    ("feedback", "ghosted.feedback", ["boost", "record_click", "summary"],
+     "feedback + learning loop (ranking adapts to engagement)", None,
+     "pure-Python — clicks/dwell/ratings persist + scale ranking by adaptivity()"),
+    ("setup", "ghosted.mail", ["set_account", "identities"],
+     "guided account + email setup (console `setup` + website onboarding)", None,
+     "pure-Python — account, identity, and email server settings"),
+    ("twofactor", "ghosted.twofactor", ["enroll", "verify"],
+     "RFC 6238 TOTP authenticator (sealed under master password)", None,
+     "pure-Python — HMAC-SHA1 TOTP + recovery codes, fail-soft drift window"),
+    ("mfa", "ghosted.mfa", ["validate", "enroll", "challenge"],
+     "multi-factor login (password + 2 factors)", None,
+     "pure-Python — authenticator/email/text/location/recovery, 2-of-N policy"),
+    ("preferences", "ghosted.preferences", ["all", "set", "accent_color"],
+     "per-account personalization", None,
+     "pure-Python — accent, notifications opt-in, display name, voice/badges"),
+    ("notifications", "ghosted.notifications", ["collect", "count"],
+     "optional opt-in notifications", None,
+     "pure-Python — health/mail/suggestion notices, dismissible, off by default"),
+    ("qrcode", "ghosted.qrcode", ["svg", "encode"],
+     "sovereign QR generation (authenticator + codes)", None,
+     "pure-Python — QR Model 2 byte-mode ECC-M, renders inline SVG, no cloud"),
 ]
 
 
@@ -90,10 +117,14 @@ def verify_contracts() -> dict[str, Any]:
 
         dep_ok = True
         if optional_dep:
-            try:
-                importlib.import_module(optional_dep)
-            except Exception:
-                dep_ok = False
+            # A capability may name several backing deps joined by "+" (e.g. docparse
+            # needs pypdf for PDF *and* python-docx for DOCX). It's fully wired only
+            # when every named dep imports; any one absent => degraded, not broken.
+            for dep in optional_dep.split("+"):
+                try:
+                    importlib.import_module(dep.strip())
+                except Exception:
+                    dep_ok = False
 
         ok = module_ok and dep_ok
         if not module_ok:

@@ -47,6 +47,101 @@ def _browser():
     return SovereignBrowserEngine()
 
 
+def _setup_wizard(*, ask=input, getpw=None, out=print, session=None) -> None:
+    """Guided account setup — captures everything here: account, display name, your
+    emails (with fallbacks), phone+carrier for text codes, an authenticator (QR),
+    a trusted-location factor, and one-time recovery codes. I/O is injectable so the
+    same flow is unit-testable. Multi-factor enrollment so 'two must be used' at login."""
+    import getpass as _gp
+    import os
+
+    getpw = getpw or _gp.getpass
+    session = session if session is not None else {}
+    from ghosted import mail, mfa, preferences, qrcode, vault
+
+    out("— Ghosted account setup —  account · profile · email · text · 2FA · location")
+    # 1) account (master password)
+    if vault.is_initialized():
+        pw = session.get("pw") or getpw("enter master password to configure your account: ")
+        if not vault.login(pw):
+            out({"setup": "wrong password — aborted"})
+            return
+        session["pw"] = pw
+        out("account: unlocked.")
+    else:
+        pw = getpw("create a master password: ")
+        if not pw or pw != getpw("confirm master password: "):
+            out({"setup": "passwords empty or did not match — aborted"})
+            return
+        vault.initialize(pw)
+        session["pw"] = pw
+        out("account: created + unlocked.")
+    # 2) display name (shown whenever signed in)
+    name = ask("your display name (shown when signed in): ").strip()
+    if name:
+        preferences.set("display_name", name)
+    # 3) email(s): primary + fallbacks (sovereign mail will try 2nd/3rd if needed)
+    out(f"sovereign address: {mail.address('me')}  (always available)")
+    elist = [e.strip() for e in ask("your email(s), comma-separated (1st, 2nd, 3rd): ")
+             .replace(";", ",").split(",") if e.strip()]
+    for e in elist:
+        try:
+            mail.add_identity(e)
+        except Exception:
+            pass
+    if elist:
+        mfa.enroll("email", pw, addrs=elist)
+        out({"email factor": elist})
+        # External email access (IMAP/POP/SMTP) so you can send/receive here, with the
+        # OPTION to save the email password (encrypted) so you don't retype it.
+        if ask("set up external email access (IMAP/SMTP) to send/receive here? [y/N]: ").strip().lower() == "y":
+            addr = elist[0]
+            proto = ask("  protocol [imap/pop/smtp] (imap): ").strip().lower() or "imap"
+            host = ask("  server host (e.g. imap.gmail.com): ").strip()
+            port_s = ask("  port (blank = default): ").strip()
+            user = ask(f"  username ({addr}): ").strip() or addr
+            save = ask("  save the email password (encrypted)? [y/N]: ").strip().lower() == "y"
+            epw = getpw("  email password: ") if save else ""
+            mail.set_account(addr, proto, host, int(port_s) if port_s.isdigit() else 0,
+                             user, password=epw, master_pw=pw)
+            out({"email access": "configured" + (" + password saved (encrypted)" if save else " (password entered per fetch)")})
+    # 4) phone + carrier → text-message (SMS) codes
+    number = ask("mobile number for text codes (blank to skip): ").strip()
+    if number:
+        out("  carriers: " + ", ".join(sorted(mfa.CARRIER_GATEWAYS)))
+        carrier = ask("  carrier: ").strip().lower()
+        mfa.enroll("phone", pw, number=number, carrier=carrier)
+        out({"text factor": {"number": number, "carrier": carrier}})
+    # 5) authenticator (QR)
+    if ask("set up an authenticator app via QR? [Y/n]: ").strip().lower() != "n":
+        en = mfa.enroll("authenticator", pw)
+        qr_path = os.path.join(mail._data_root(), "authenticator_qr.svg")
+        try:
+            with open(qr_path, "w", encoding="utf-8") as fh:
+                fh.write(qrcode.svg(en["uri"]))
+        except Exception:
+            qr_path = "(could not save)"
+        out({"authenticator": "enrolled", "secret": en["secret"],
+             "otpauth_uri": en["uri"], "qr_saved": qr_path,
+             "tip": "open the saved .svg to scan, or type the secret into your app"})
+    # 6) trusted-location factor (this network)
+    if ask("trust this network as a location factor? [Y/n]: ").strip().lower() != "n":
+        ip = ""
+        try:
+            from ghosted.homepage import _primary_lan_ip
+
+            ip = _primary_lan_ip()
+        except Exception:
+            pass
+        r = mfa.enroll("location", pw, ip=ip)
+        out({"location factor": r.get("trusted")})
+    # 7) one-time recovery codes
+    rc = mfa.enroll("recovery", pw)["recovery_codes"]
+    out({"recovery_codes": rc, "note": "store safely — each works once (lost-factor escape)"})
+    out({"setup": "done", "display_name": preferences.get("display_name"),
+         "identities": mail.identities(), "mfa": mfa.status()})
+
+
 def menu() -> None:
     print(BANNER)
     g = None
@@ -75,6 +170,7 @@ def menu() -> None:
           uncloak <img>     extract hidden message from an image
           forge <path>      produce a unique, equivalent artifact
           browse <query>    sovereign web search (Google/Bing/YT/Tor)
+          home [port]       open the search website (GUI: logo + search bar + layout)
           login             unlock / set the master password (vault + mesh)
           network           build a WireGuard mesh, sealed in the vault (login first)
           encrypt <text>    seal text with GHOSTED-CIPHER-1 (passphrase)
@@ -82,6 +178,13 @@ def menu() -> None:
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
           scan <path> [q]   EDR-lite file safety check (q = quarantine if malicious)
           doctor            report which capabilities are wired (+ optional deps)
+          setup             guided account setup: name·email·text·2FA(QR)·location
+          account           your info: personal data + history + usage stats
+          mfa               multi-factor status (password + 2 factors required)
+          prefs [set k v]   customize your experience (accent/notifications/…)
+          notify            your optional notifications
+          health            device health: CPU/RAM/disk/battery/net/security
+          feedback [sub]    learning loop: summary | good <q> | bad <q> | rate <s> <q>
           connect           check internet across wifi/LAN/WAN (multi-interface)
           hotspot           start a WiFi hotspot for the mesh (Windows, needs admin)
           contacts          list saved contacts
@@ -138,9 +241,109 @@ def handle_command(
     elif cmd == "forge":
         out(g.forge(rest, rest + ".forged"))
     elif cmd == "browse":
-        out(_browser().web_search(rest))
+        from ghosted import feedback, spellcheck
+
+        sp = spellcheck.correct(rest)
+        q = sp["corrected"]
+        results = _browser().web_search(q)
+        try:
+            feedback.record_search(q, len(results) if hasattr(results, "__len__") else 0)
+        except Exception:
+            pass
+        if sp["changed"]:
+            out({"showing_results_for": q, "you_typed": sp["original"], "results": results})
+        else:
+            out(results)
+    elif cmd in ("home", "gui", "web"):
+        # Launch Ghosted's own search website (logo + search bar + layout) and open
+        # it in the default browser. The server runs in a daemon thread so this
+        # console stays interactive; homepage.serve() blocks only that thread.
+        import threading
+        import time
+        import webbrowser
+
+        from ghosted import homepage
+
+        port = int(rest.strip()) if rest.strip().isdigit() else homepage._PORT
+        if not session.get("home_thread"):
+            t = threading.Thread(target=homepage.serve, args=(port,), daemon=True)
+            t.start()
+            session["home_thread"] = t
+            session["home_port"] = port
+            time.sleep(0.6)  # let it bind + print its reachable IPs
+        url = f"http://127.0.0.1:{session.get('home_port', port)}"
+        try:
+            webbrowser.open(url)
+        except Exception:  # headless / no browser — the URL is still served
+            pass
+        out({"homepage": "live", "open": url,
+             "note": "search website running; this console stays active"})
+    elif cmd == "health":
+        from ghosted import health
+
+        out(health.snapshot())
+    elif cmd == "feedback":
+        from ghosted import feedback
+
+        sub, _, arg = rest.partition(" ")
+        sub = sub.strip().lower()
+        if sub in ("", "summary", "status"):
+            out(feedback.summary())
+        elif sub in ("good", "up", "+1", "👍"):
+            feedback.record_rating(arg, 1.0)
+            out({"feedback": "recorded 👍", "query": arg})
+        elif sub in ("bad", "down", "-1", "👎"):
+            feedback.record_rating(arg, -1.0)
+            out({"feedback": "recorded 👎", "query": arg})
+        elif sub == "rate":
+            score_s, _, q = arg.partition(" ")
+            try:
+                feedback.record_rating(q, float(score_s))
+                out({"feedback": "recorded", "score": score_s, "query": q})
+            except ValueError:
+                out({"usage": "feedback rate <1-5 or -1..1> <query>"})
+        else:
+            out({"usage": "feedback [summary | good <q> | bad <q> | rate <score> <q>]"})
+    elif cmd == "setup":
+        _setup_wizard(ask=ask, getpw=getpw, out=out, session=session)
+    elif cmd == "mfa":
+        from ghosted import mfa
+
+        out(mfa.status())
+    elif cmd in ("prefs", "preferences"):
+        from ghosted import preferences
+
+        sub, _, arg = rest.partition(" ")
+        sub = sub.strip().lower()
+        if sub in ("", "show", "list"):
+            out(preferences.all())
+        elif sub == "set":
+            k, _, v = arg.partition(" ")
+            out(preferences.set(k.strip(), v.strip()))
+        elif sub == "reset":
+            out(preferences.reset())
+        else:
+            out({"usage": "prefs [show | set <key> <value> | reset]"})
+    elif cmd in ("notify", "notifications"):
+        from ghosted import notifications
+
+        out({"notifications": notifications.collect()})
+    elif cmd == "account":
+        # Account information: all personal data + history + statistical use.
+        from ghosted import feedback, mail, mfa, preferences
+
+        fb = feedback.summary()
+        out({
+            "display_name": preferences.get("display_name") or "(unset)",
+            "identities": mail.identities(),
+            "email_accounts": list(mail.accounts().keys()),
+            "mfa": mfa.status(),
+            "preferences": preferences.all(),
+            "history": feedback.recent_queries(limit=15),
+            "usage_stats": {k: fb[k] for k in ("searches", "clicks", "ratings", "adaptivity", "learned_pairs")},
+        })
     elif cmd == "login":
-        from ghosted import vault
+        from ghosted import mfa, vault
 
         pw = getpw("master password: ")
         if not vault.is_initialized():
@@ -150,12 +353,36 @@ def handle_command(
                 return True
             vault.initialize(pw)
             session["pw"] = pw
-            out({"vault": "initialized + unlocked"})
-        elif vault.login(pw):
-            session["pw"] = pw
-            out({"vault": "unlocked"})
-        else:
+            out({"vault": "initialized + unlocked", "tip": "run 'setup' to add 2FA factors"})
+            return True
+        if not vault.login(pw):
             out({"vault": "wrong password"})
+            return True
+        # Multi-factor: password verified — now require the enrolled second factors.
+        enrolled = mfa.enrolled()
+        if not enrolled:
+            session["pw"] = pw
+            out({"vault": "unlocked", "note": "no 2FA factors enrolled — run 'setup' to add them"})
+            return True
+        proofs = {}
+        # auto location factor (the machine itself counts as a trusted location here)
+        for factor in enrolled:
+            if factor == "location":
+                continue  # verified from network context, not a typed code
+            if factor in ("email", "phone"):
+                ch = mfa.challenge(factor, pw)
+                if ch.get("shown"):
+                    out({factor: f"code (offline fallback): {ch['shown']}"})
+                else:
+                    out({factor: f"one-time code sent via {ch.get('via', factor)}"})
+            proofs[factor] = ask(f"  {factor} code: ").strip()
+        result = mfa.validate(pw, proofs, client_ip="127.0.0.1")
+        if result["ok"]:
+            session["pw"] = pw
+            out({"vault": "unlocked", "factors_used": result["passed"], "policy": result["required"]})
+        else:
+            out({"vault": "2FA failed", "passed": result["passed"],
+                 "required": result["required"], "enrolled": result.get("enrolled")})
     elif cmd == "network":
         from ghosted import vault
 
