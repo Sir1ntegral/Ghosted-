@@ -1,189 +1,174 @@
 <#
 .SYNOPSIS
-  Self-adapting installer for Ghosted — no external installer tooling required
-  (no Inno Setup). It TESTS the system it is stored on and ADAPTS:
+  Autonomous, self-adapting installer for Ghosted -- installs BOTH the FULL and
+  LEAN variants (or one), with no external tooling (no Inno Setup) and no prompts.
 
-    * OS / architecture            -> verifies a Windows x64 host for the bundled .exe
-    * the drive the repo lives on  -> picks an install root with enough free space
-    * privileges                   -> per-user install by default (no admin needed);
-                                      uses Program Files only when admin + requested
-    * existing build               -> installs dist\Ghosted if present; otherwise
-                                      builds it (when Python + PyInstaller are available)
+  It TESTS the host and ADAPTS:
+    * OS / architecture   -> verifies a Windows x64 host for the bundled .exe
+    * privileges          -> per-user install by default (no admin needed)
+    * bundle discovery    -> finds each variant's onedir bundle next to THIS
+                             script first (Ghosted-FULL / Ghosted-LEAN), then in
+                             dist\ (Ghosted-full / Ghosted-lean); can build if asked
+    * Smart App Control   -> detects + warns (unsigned bundles may be blocked)
 
-  Then it copies the onedir bundle to the chosen location and creates a Desktop
-  shortcut + Start-Menu shortcut with the ghost-rabbit icon.
+  Then it copies each found bundle to a per-user location and creates Desktop +
+  Start-Menu shortcuts ("Ghosted (Full)" / "Ghosted (Lean)").
 
 .EXAMPLE
-  .\Install-Ghosted.ps1                 # detect, adapt, install, make desktop icon
-  .\Install-Ghosted.ps1 -DetectOnly     # print a JSON system report and exit (smoke)
+  .\Install-Ghosted.ps1                 # autonomous: install every variant found
+  .\Install-Ghosted.ps1 -Variant Lean   # install only the lean variant
+  .\Install-Ghosted.ps1 -DetectOnly     # print a JSON system report and exit
   .\Install-Ghosted.ps1 -WhatIf         # show the plan without changing anything
-  .\Install-Ghosted.ps1 -Build -Lean    # force a fresh lean build, then install
-  .\Install-Ghosted.ps1 -Uninstall      # remove the install + shortcuts
+  .\Install-Ghosted.ps1 -Build          # (re)build missing bundles, then install
+  .\Install-Ghosted.ps1 -Uninstall      # remove all installed variants + shortcuts
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
+    [ValidateSet("Both", "Full", "Lean")]
+    [string]$Variant = "Both",
     [string]$InstallRoot,
-    [switch]$Lean,
     [switch]$Build,
     [switch]$DetectOnly,
     [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
-$AppName = "Ghosted"
-$Exe = "$AppName.exe"
-$repo = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+$Exe = "Ghosted.exe"
+$here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
-# ── System detection — "test what system it is stored on" ────────────────────
+# Variant model: bundle-folder candidates (by name), install dir name, shortcut label.
+$VARIANTS = [ordered]@{
+    Full = @{ names = @("Ghosted-FULL", "Ghosted-Full", "dist\Ghosted-full"); dest = "Ghosted-Full"; label = "Ghosted (Full)"; leanFlag = $false }
+    Lean = @{ names = @("Ghosted-LEAN", "Ghosted-Lean", "dist\Ghosted-lean"); dest = "Ghosted-Lean"; label = "Ghosted (Lean)"; leanFlag = $true }
+}
+$wanted = if ($Variant -eq "Both") { @("Full", "Lean") } else { @($Variant) }
+
 function Get-SystemReport {
     $isWin = $true
-    if ($null -ne $IsWindows) { $isWin = $IsWindows }  # $IsWindows exists on PS7+
+    if ($null -ne $IsWindows) { $isWin = $IsWindows }
     $admin = $false
     if ($isWin) {
         try {
-            $admin = ([Security.Principal.WindowsPrincipal]`
-                [Security.Principal.WindowsIdentity]::GetCurrent()`
-                ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+            $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
         } catch { $admin = $false }
     }
     $py = (Get-Command python -ErrorAction SilentlyContinue)
     $hasPyInstaller = $false
-    if ($py) {
-        try { python -c "import PyInstaller" 2>$null; $hasPyInstaller = ($LASTEXITCODE -eq 0) } catch {}
-    }
-    # Smart App Control / WDAC blocks unsigned exes from user-writable paths — detect
-    # it so we can warn that the bundle may need signing or a trusted install location.
+    if ($py) { try { python -c "import PyInstaller" 2>$null; $hasPyInstaller = ($LASTEXITCODE -eq 0) } catch {} }
     $appControl = "unknown"
     if ($isWin) {
         try {
-            $v = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" `
-                    -Name VerifiedAndReputablePolicyState -ErrorAction Stop`
-                ).VerifiedAndReputablePolicyState
+            $v = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" -Name VerifiedAndReputablePolicyState -ErrorAction Stop).VerifiedAndReputablePolicyState
             $appControl = @{0 = "off"; 1 = "enforced"; 2 = "evaluation" }[[int]$v]
             if (-not $appControl) { $appControl = "state=$v" }
         } catch { $appControl = "off-or-unset" }
     }
-    $repoDrive = (Split-Path -Qualifier $repo)
     $localApp = $env:LOCALAPPDATA
     if (-not $localApp) { $localApp = Join-Path $HOME "AppData\Local" }
     $perUserRoot = Join-Path $localApp "Programs"
     $freeGB = $null
-    try {
-        $q = if ($repoDrive) { $repoDrive.TrimEnd(':') } else { 'C' }
-        $freeGB = [math]::Round((Get-PSDrive $q).Free / 1GB, 1)
-    } catch {}
+    try { $q = (Split-Path -Qualifier $here).TrimEnd(':'); if (-not $q) { $q = 'C' }; $freeGB = [math]::Round((Get-PSDrive $q).Free / 1GB, 1) } catch {}
+    # Precompute these (PowerShell 5.1 cannot use an if/else statement directly
+    # as a hashtable value -- only PS7 can -- and most Windows hosts default to 5.1).
+    $osCap = if ($isWin) { (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption } else { [Environment]::OSVersion.Platform.ToString() }
+    $pySrc = if ($py) { $py.Source } else { $null }
     [ordered]@{
-        appName        = $AppName
-        os             = if ($isWin) { (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption } else { [Environment]::OSVersion.Platform.ToString() }
-        osVersion      = [Environment]::OSVersion.Version.ToString()
-        isWindows      = $isWin
-        arch           = $env:PROCESSOR_ARCHITECTURE
-        appControl     = $appControl
-        admin          = $admin
-        repo           = $repo
-        repoDrive      = $repoDrive
-        freeGB         = $freeGB
-        python         = if ($py) { $py.Source } else { $null }
-        hasPyInstaller = $hasPyInstaller
-        builtBundle    = (Join-Path $repo "dist\$AppName\$Exe")
-        builtExists    = (Test-Path (Join-Path $repo "dist\$AppName\$Exe"))
-        icon           = (Join-Path $repo "assets\ghost_rabbit.ico")
-        iconExists     = (Test-Path (Join-Path $repo "assets\ghost_rabbit.ico"))
-        perUserRoot    = $perUserRoot
-        systemRoot     = (Join-Path $env:ProgramFiles $AppName)
+        os = $osCap
+        isWindows = $isWin; arch = $env:PROCESSOR_ARCHITECTURE; admin = $admin
+        appControl = $appControl; here = $here; freeGB = $freeGB
+        python = $pySrc; hasPyInstaller = $hasPyInstaller
+        perUserRoot = $perUserRoot; icon = (Join-Path $here "assets\ghost_rabbit.ico")
+        wantedVariants = $wanted
     }
 }
 
-# ── Adapt: choose where to install based on the detected system ──────────────
-function Resolve-InstallRoot([hashtable]$sys) {
-    if ($InstallRoot) { return $InstallRoot }
-    # Admin + at least 1 GB free -> system-wide Program Files; else per-user (no admin).
-    if ($sys.admin -and ($null -eq $sys.freeGB -or $sys.freeGB -ge 1)) {
-        return $sys.systemRoot
+# Locate a variant's bundle dir (containing Ghosted.exe). $null if not found.
+function Find-Bundle([string]$key) {
+    foreach ($n in $VARIANTS[$key].names) {
+        $p = if ([IO.Path]::IsPathRooted($n)) { $n } else { Join-Path $here $n }
+        if (Test-Path (Join-Path $p $Exe)) { return $p }
     }
-    return (Join-Path $sys.perUserRoot $AppName)
+    return $null
 }
 
-function New-Shortcut([string]$lnkPath, [string]$target, [string]$icon, [string]$workdir) {
+function New-Shortcut([string]$lnkPath, [string]$target, [string]$icon, [string]$workdir, [string]$desc) {
     $dir = Split-Path -Parent $lnkPath
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
     $sh = New-Object -ComObject WScript.Shell
     $sc = $sh.CreateShortcut($lnkPath)
-    $sc.TargetPath = $target
-    $sc.WorkingDirectory = $workdir
+    $sc.TargetPath = $target; $sc.WorkingDirectory = $workdir
     if ($icon -and (Test-Path $icon)) { $sc.IconLocation = $icon }
-    $sc.Description = "Ghosted — sovereign stealth console"
-    $sc.Save()
+    $sc.Description = $desc; $sc.Save()
 }
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+function Install-Variant([string]$key, [hashtable]$sys) {
+    $v = $VARIANTS[$key]
+    $dest = if ($InstallRoot) { Join-Path $InstallRoot $v.dest } else { Join-Path $sys.perUserRoot $v.dest }
+    $bundle = Find-Bundle $key
+    if (-not $bundle) {
+        if ($Build -and $sys.python -and $sys.hasPyInstaller -and (Test-Path (Join-Path $here "build.ps1"))) {
+            Write-Host "[$key] no bundle found -- building ..."
+            $ba = @{}; if ($v.leanFlag) { $ba['Lean'] = $true }
+            if ($PSCmdlet.ShouldProcess("build.ps1", "build $key")) { & (Join-Path $here "build.ps1") @ba; $bundle = Join-Path $here "dist\Ghosted" }
+        }
+        if (-not $bundle -or -not (Test-Path (Join-Path $bundle $Exe))) {
+            Write-Warning "[$key] no bundle found (looked for: $($v.names -join ', ')) -- skipping."
+            return $false
+        }
+    }
+    $exe = Join-Path $dest $Exe
+    $deskLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) ($v.label + ".lnk")
+    $menuLnk = Join-Path ([Environment]::GetFolderPath('Programs')) ($v.label + ".lnk")
+    Write-Host "[$key] install: $bundle  ->  $dest"
+    if ($PSCmdlet.ShouldProcess($dest, "copy $key bundle + shortcuts")) {
+        if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+        New-Item -ItemType Directory -Force $dest | Out-Null
+        Copy-Item (Join-Path $bundle '*') $dest -Recurse -Force
+        # Icon: prefer the .ico PyInstaller shipped in the bundle (_internal), then a
+        # local assets copy, else fall back to the exe's embedded icon (--icon).
+        $icon = Join-Path $dest "_internal\ghost_rabbit.ico"
+        if (-not (Test-Path $icon)) {
+            if (Test-Path $sys.icon) { Copy-Item $sys.icon (Join-Path $dest 'ghost_rabbit.ico') -Force; $icon = Join-Path $dest 'ghost_rabbit.ico' }
+            else { $icon = $exe }
+        }
+        New-Shortcut $deskLnk $exe $icon $dest "Ghosted -- sovereign stealth console ($key)"
+        New-Shortcut $menuLnk $exe $icon $dest "Ghosted -- sovereign stealth console ($key)"
+        Write-Host "[$key] installed. Shortcut: $deskLnk"
+    }
+    return $true
+}
+
+# -- Main ---------------------------------------------------------------------
 $sys = Get-SystemReport
-
-if ($DetectOnly) {
-    $sys | ConvertTo-Json -Depth 4
-    exit 0
-}
-
-$dest = Resolve-InstallRoot $sys
-$desktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "Ghosted.lnk"
-$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) "Ghosted.lnk"
-$installedExe = Join-Path $dest $Exe
-$installedIcon = Join-Path $dest "ghost_rabbit.ico"
+if ($DetectOnly) { $sys | ConvertTo-Json -Depth 4; exit 0 }
 
 if ($Uninstall) {
-    Write-Host "Uninstalling $AppName from $dest ..."
-    if ($PSCmdlet.ShouldProcess($dest, "Remove install + shortcuts")) {
-        foreach ($p in @($desktopLnk, $startMenu)) { if (Test-Path $p) { Remove-Item $p -Force } }
-        if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-        Write-Host "Removed."
+    foreach ($key in @("Full", "Lean")) {
+        $v = $VARIANTS[$key]
+        $dest = if ($InstallRoot) { Join-Path $InstallRoot $v.dest } else { Join-Path $sys.perUserRoot $v.dest }
+        foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Desktop')) ($v.label + ".lnk")), (Join-Path ([Environment]::GetFolderPath('Programs')) ($v.label + ".lnk")))) {
+            if (Test-Path $lnk) { if ($PSCmdlet.ShouldProcess($lnk, "remove shortcut")) { Remove-Item $lnk -Force } }
+        }
+        if (Test-Path $dest) { if ($PSCmdlet.ShouldProcess($dest, "remove install")) { Remove-Item $dest -Recurse -Force } }
     }
-    exit 0
+    Write-Host "Uninstalled all Ghosted variants + shortcuts."; exit 0
 }
 
 if (-not $sys.isWindows) {
-    Write-Error "The bundled $Exe is a Windows executable; this host is not Windows. " +
-    "Run from source instead: PYTHONPATH=src python -m ghosted.console"
+    Write-Error "The bundled $Exe is a Windows executable; this host is not Windows. Run from source: PYTHONPATH=src python -m ghosted.console"
     exit 2
 }
 
-# Ensure a built bundle exists; build if asked or missing (and tooling is present).
-if ($Build -or -not $sys.builtExists) {
-    if (-not $sys.python -or -not $sys.hasPyInstaller) {
-        Write-Error "No built bundle at $($sys.builtBundle) and cannot build " +
-        "(python=$($sys.python), pyinstaller=$($sys.hasPyInstaller)). " +
-        "Install Python + 'pip install pyinstaller', or run build.ps1 on a build box."
-        exit 3
-    }
-    $buildArgs = @{}
-    if ($Lean) { $buildArgs['Lean'] = $true }
-    Write-Host "Building $AppName ($(if ($Lean) { 'lean' } else { 'full' })) ..."
-    if ($PSCmdlet.ShouldProcess("$repo\build.ps1", "Run PyInstaller build")) {
-        & (Join-Path $repo "build.ps1") @buildArgs
-    }
-}
+Write-Host "Ghosted installer -- host: $($sys.os) [$($sys.arch)]  admin=$($sys.admin)  freeGB=$($sys.freeGB)"
+Write-Host "Installing variants: $($wanted -join ', ')  (per-user: $($sys.perUserRoot))"
+$installed = 0
+foreach ($key in $wanted) { if (Install-Variant $key $sys) { $installed++ } }
 
-$srcBundle = Join-Path $repo "dist\$AppName"
-if (-not (Test-Path (Join-Path $srcBundle $Exe))) {
-    Write-Error "Build bundle not found at $srcBundle\$Exe — nothing to install."
+if ($installed -eq 0) {
+    Write-Error "No variants installed -- no bundles found next to this script or in dist\. Place Ghosted-FULL / Ghosted-LEAN beside this installer, or run with -Build."
     exit 4
 }
-
-Write-Host "Installing $AppName -> $dest"
-Write-Host "  host: $($sys.os) [$($sys.arch)]  admin=$($sys.admin)  freeGB=$($sys.freeGB)"
-if ($PSCmdlet.ShouldProcess($dest, "Copy bundle + create shortcuts")) {
-    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-    New-Item -ItemType Directory -Force $dest | Out-Null
-    Copy-Item (Join-Path $srcBundle '*') $dest -Recurse -Force
-    if ($sys.iconExists) { Copy-Item $sys.icon $installedIcon -Force }
-    New-Shortcut $desktopLnk $installedExe $installedIcon $dest
-    New-Shortcut $startMenu $installedExe $installedIcon $dest
-    Write-Host "Installed. Desktop icon: $desktopLnk"
-    Write-Host "Launch: `"$installedExe`""
-    if ($sys.appControl -in @("enforced", "evaluation")) {
-        Write-Warning (
-            "Smart App Control / WDAC is '$($sys.appControl)' on this host — it may block the " +
-            "unsigned Ghosted.exe. If launching is blocked, either code-sign the bundle, or " +
-            "run from source: `$env:PYTHONPATH='<repo>\src;<rabbit-tree>'; python -m ghosted.console"
-        )
-    }
+Write-Host "Done -- $installed variant(s) installed."
+if ($sys.appControl -in @("enforced", "evaluation")) {
+    Write-Warning "Smart App Control / WDAC is '$($sys.appControl)' -- it may block the unsigned Ghosted.exe on first launch. Choose 'More info -> Run anyway', sign the bundle, or run from source."
 }
