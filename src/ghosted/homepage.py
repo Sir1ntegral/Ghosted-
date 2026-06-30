@@ -389,6 +389,41 @@ window.ghostedFB=(function(){
 """
 
 
+_EMAIL_AUTOCONFIG_JS = """
+(function(){
+ var P={'gmail.com':'gmail.com','googlemail.com':'gmail.com','outlook.com':'o','hotmail.com':'o',
+  'live.com':'o','msn.com':'o','yahoo.com':'y','ymail.com':'y','aol.com':'aol','icloud.com':'i',
+  'me.com':'i','zoho.com':'z','gmx.com':'gmx','fastmail.com':'fm'};
+ var H={'gmail.com':['imap.gmail.com','pop.gmail.com','smtp.gmail.com'],
+  'o':['outlook.office365.com','outlook.office365.com','smtp-mail.outlook.com'],
+  'y':['imap.mail.yahoo.com','pop.mail.yahoo.com','smtp.mail.yahoo.com'],
+  'aol':['imap.aol.com','pop.aol.com','smtp.aol.com'],
+  'i':['imap.mail.me.com','imap.mail.me.com','smtp.mail.me.com'],
+  'z':['imap.zoho.com','pop.zoho.com','smtp.zoho.com'],
+  'gmx':['imap.gmx.com','pop.gmx.com','mail.gmx.com'],
+  'fm':['imap.fastmail.com','pop.fastmail.com','smtp.fastmail.com']};
+ var PT={imap:993,pop:995,smtp:587};
+ function fill(){
+  var e=document.getElementById('acemail'); if(!e)return;
+  var at=e.value.indexOf('@'); if(at<0)return;
+  var dom=e.value.slice(at+1).trim().toLowerCase(); if(!dom)return;
+  var proto=(document.getElementById('acproto').value||'imap').trim().toLowerCase();
+  if(['imap','pop','smtp'].indexOf(proto)<0)proto='imap';
+  var key=P[dom], hosts=key?H[key]:null;
+  var host=hosts?hosts[{imap:0,pop:1,smtp:2}[proto]]:(proto+'.'+dom);
+  var h=document.getElementById('achost'), p=document.getElementById('acport');
+  if(h&&!h.value)h.value=host;
+  if(p&&!p.value)p.value=PT[proto];
+  var note=document.getElementById('acauto');
+  if(note)note.textContent=(key?'Recognised provider — ':'Guessed from domain — ')+'server set to '+host+':'+PT[proto]+' (edit if needed).';
+ }
+ var e=document.getElementById('acemail'), pr=document.getElementById('acproto');
+ if(e){e.addEventListener('blur',fill);e.addEventListener('change',fill);}
+ if(pr){pr.addEventListener('change',function(){var h=document.getElementById('achost');if(h)h.value='';var p=document.getElementById('acport');if(p)p.value='';fill();});}
+})();
+"""
+
+
 def _ctx(handler) -> dict:
     """Per-request view context: is this the signed-in account holder, their display
     name, accent, and notification count. Guests get defaults (no personal data)."""
@@ -767,7 +802,7 @@ def _account_page(ctx: dict | None = None) -> str:
     """The account holder's full account-info page: all personal data + history +
     statistical use, plus preferences, optional notifications, and multi-factor setup."""
     ctx = ctx or {"authed": True, "name": "", "accent": "#9aa9ff", "notes": 0}
-    from ghosted import feedback, mail, mfa, notifications, preferences
+    from ghosted import feedback, mail, mfa, notifications, preferences, vault
 
     prefs = preferences.all()
     fb = feedback.summary()
@@ -775,6 +810,23 @@ def _account_page(ctx: dict | None = None) -> str:
     status = mfa.status()
     enrolled = set(status["enrolled"])
     notes = notifications.collect()
+    wg_status = '<span class="s-ok">✓ configured</span>' if vault.has_mesh() else '<span class="muted">(not set up)</span>'
+    # Account-status summary so the site shows what's already enrolled/saved.
+    _saved_pw = sum(1 for c in mail.accounts().values() if c.get("pw_blob"))
+    _fac = len(enrolled)
+    _two = '<span class="s-ok">✓</span>' if _fac >= 2 else f'<span class="s-warn">{_fac}/2</span>'
+    _ext = len(mail.accounts())
+    _status_summary = (
+        '<div class="acct" style="margin-bottom:6px"><h3 style="border-top:none;padding-top:0">Status</h3>'
+        f'<div class="row">Account <span class="s-ok">✓ created</span>'
+        + (f' · signed in as <b>{html.escape(prefs["display_name"])}</b>' if prefs["display_name"] else '')
+        + '</div>'
+        f'<div class="row">Two-factor {_two} <span class="muted">· {_fac} factor(s): '
+        f'{", ".join(sorted(enrolled)) or "none yet"}</span></div>'
+        f'<div class="row">Email <span class="muted">· {len(mail.identities())} identity(ies), {_ext} server account(s), '
+        f'{_saved_pw} with saved password</span></div>'
+        f'<div class="row">WireGuard mesh {wg_status}</div></div>'
+    )
 
     sovereign = mail.address("me")
 
@@ -859,6 +911,7 @@ def _account_page(ctx: dict | None = None) -> str:
 <div class="tag">all your personal data, history &amp; usage — private to you</div>
 <div class="btns" style="margin:6px 0 4px"><button onclick="location.href='/mail'">✉ Open your mailbox</button>
  <button onclick="location.href='/'">🏠 Home</button></div>
+{_status_summary}
 <div class="acct">
   <div class="muted" style="margin-bottom:6px">Tip: edit a field and press its Save button. Use “remove”/“disable” to update entries.</div>
   <h3>Profile</h3>
@@ -898,15 +951,28 @@ def _account_page(ctx: dict | None = None) -> str:
 
   <h3>External email accounts</h3>{acct_rows}
   <form action="/account" method="post"><input type="hidden" name="action" value="add_account">
-   <input type="text" name="email" placeholder="email address">
-   <input type="text" name="protocol" placeholder="protocol: imap / pop / smtp (default imap)">
-   <input type="text" name="host" placeholder="server host (e.g. imap.gmail.com)">
-   <input type="text" name="port" placeholder="port (blank = default)">
+   <input type="text" name="email" id="acemail" placeholder="email address (server details auto-fill)">
+   <input type="text" name="protocol" id="acproto" placeholder="protocol: imap / pop / smtp (default imap)">
+   <input type="text" name="host" id="achost" placeholder="server host (auto-filled from your email)">
+   <input type="text" name="port" id="acport" placeholder="port (auto-filled)">
    <input type="password" name="password" placeholder="email password (optional — saved encrypted)">
    <input type="password" name="pw" placeholder="your master password (only if saving the email password)">
-   <div class="muted">Leave the email password blank to enter it per fetch. If you fill it in, it's
-    sealed with GHOSTED-CIPHER-1 under your master password — you can change or remove it anytime.</div>
+   <div class="muted" id="acauto">Enter your email and we fill in the IMAP/SMTP server for you
+    (you can edit it). Leave the email password blank to enter it per fetch, or save it encrypted.</div>
    <div class="btns"><button type="submit">Save email account</button></div></form>
+  <script>{_EMAIL_AUTOCONFIG_JS}</script>
+
+  <h3>WireGuard mesh {wg_status}</h3>
+  <div class="muted">Enroll your devices into a sovereign WireGuard mesh — every config is
+   sealed in your vault. One device per line: <b>name endpoint</b> (endpoint optional / blank if NAT).</div>
+  <form action="/account" method="post"><input type="hidden" name="action" value="build_mesh">
+   <input type="text" name="hub" placeholder="hub device name (blank = full mesh)">
+   <textarea name="devices" placeholder="phone&#10;laptop 203.0.113.5:51820&#10;nuc" style="width:100%;min-height:90px;margin:7px 0;padding:11px 14px;border-radius:10px;border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#fff;font:13px monospace"></textarea>
+   <input type="password" name="pw" placeholder="your master password (seals the mesh)">
+   <div class="btns"><button type="submit">Enroll devices / build mesh</button></div></form>
+  <form action="/account" method="post"><input type="hidden" name="action" value="view_mesh">
+   <input type="password" name="pw" placeholder="your master password (to view configs)">
+   <div class="btns"><button type="submit">View / export mesh configs</button></div></form>
 
   <h3>Usage statistics</h3>{stats}
   <h3>Recent search history</h3>{hist_rows}
@@ -949,6 +1015,28 @@ def _codes_page(codes: list, ctx: dict | None = None) -> str:
 <div class="tag">store these safely — each works once if you lose a factor</div>
 <div class="acct" style="text-align:center">{rows}
 <div class="tag"><a href="/account" style="color:#9aa9ff;text-decoration:none">← back to account</a></div></div>
+</body></html>"""
+
+
+def _mesh_page(configs: dict, ctx: dict | None = None, msg: str = "") -> str:
+    """Show each device's WireGuard .conf after enrolling — import into WireGuard."""
+    ctx = ctx or {"authed": True, "accent": "#9aa9ff", "notes": 0}
+    note = f'<div class="tag" style="color:#7bd88f">{html.escape(msg)}</div>' if msg else ""
+    blocks = "".join(
+        f'<h3>{html.escape(name)}</h3>'
+        f'<textarea readonly style="width:100%;min-height:170px;padding:11px 14px;border-radius:10px;'
+        f'border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#cfe;font:12px monospace">'
+        f'{html.escape(conf)}</textarea>'
+        for name, conf in (configs or {}).items()
+    ) or '<div class="row muted">no devices in the mesh yet</div>'
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — WireGuard</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:30px;margin-top:64px">🔗 <b>Your WireGuard mesh</b></div>
+<div class="tag">import each device's config into the WireGuard app (Add Tunnel → from text/file)</div>{note}
+<div class="acct">{blocks}
+<div class="tag" style="margin-top:14px"><a href="/account" style="color:#9aa9ff;text-decoration:none">← account</a>
+ &nbsp;·&nbsp; <a href="/" style="color:#9aa9ff;text-decoration:none">🏠 Home</a></div></div>
 </body></html>"""
 
 
@@ -1467,6 +1555,28 @@ class _Handler(BaseHTTPRequestHandler):
                 mail.remove_account(g("email"))
             elif action == "remove_factor":
                 mfa.remove(g("factor"), g("pw"))
+            elif action == "build_mesh":
+                pw = g("pw")
+                if not vault.login(pw):
+                    self._send(_account_page(_ctx(self)))
+                    return
+                devices = []
+                for line in (form.get("devices") or [""])[0].splitlines():
+                    parts = line.split()
+                    if parts:
+                        devices.append((parts[0], parts[1] if len(parts) > 1 else ""))
+                if devices:
+                    vault.build_and_seal_mesh(devices, pw, hub=g("hub"))
+                    self._send(_mesh_page(vault.unseal_mesh(pw), _ctx(self),
+                                          f"enrolled {len(devices)} device(s) into your mesh"))
+                    return
+            elif action == "view_mesh":
+                pw = g("pw")
+                if vault.has_mesh() and vault.login(pw):
+                    self._send(_mesh_page(vault.unseal_mesh(pw), _ctx(self)))
+                    return
+                self._send(_account_page(_ctx(self)))
+                return
         except Exception:
             pass  # bad field → just re-render the dashboard, never 500
         self.send_response(303)

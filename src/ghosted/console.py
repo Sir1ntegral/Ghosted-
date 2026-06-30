@@ -97,8 +97,10 @@ def _setup_wizard(*, ask=input, getpw=None, out=print, session=None) -> None:
         if ask("set up external email access (IMAP/SMTP) to send/receive here? [y/N]: ").strip().lower() == "y":
             addr = elist[0]
             proto = ask("  protocol [imap/pop/smtp] (imap): ").strip().lower() or "imap"
-            host = ask("  server host (e.g. imap.gmail.com): ").strip()
-            port_s = ask("  port (blank = default): ").strip()
+            # Auto-fill the server from the email's provider so the user needn't look it up.
+            sug = mail.provider_config(addr).get(proto, {})
+            host = ask(f"  server host [{sug.get('host', '')}]: ").strip() or sug.get("host", "")
+            port_s = ask(f"  port [{sug.get('port', '')}]: ").strip()
             user = ask(f"  username ({addr}): ").strip() or addr
             save = ask("  save the email password (encrypted)? [y/N]: ").strip().lower() == "y"
             epw = getpw("  email password: ") if save else ""
@@ -138,6 +140,23 @@ def _setup_wizard(*, ask=input, getpw=None, out=print, session=None) -> None:
     # 7) one-time recovery codes
     rc = mfa.enroll("recovery", pw)["recovery_codes"]
     out({"recovery_codes": rc, "note": "store safely — each works once (lost-factor escape)"})
+    # 8) WireGuard mesh enrollment (optional) — seal each device's config in the vault
+    if ask("enroll devices into a sovereign WireGuard mesh now? [y/N]: ").strip().lower() == "y":
+        from ghosted import vault as _v
+
+        hub = ask("  hub device name (blank = full mesh): ").strip()
+        devices = []
+        out("  add devices (blank name to finish).")
+        while True:
+            nm = ask("    device name: ").strip()
+            if not nm:
+                break
+            ep = ask(f"    {nm} public endpoint host:port (blank if NAT): ").strip()
+            devices.append((nm, ep))
+        if devices:
+            names = _v.build_and_seal_mesh(devices, pw, hub=hub)
+            out({"wireguard": "mesh sealed in your vault", "devices": names,
+                 "export": "type 'mesh export' to write each importable .conf, or use the Account page"})
     out({"setup": "done", "display_name": preferences.get("display_name"),
          "identities": mail.identities(), "mfa": mfa.status()})
 

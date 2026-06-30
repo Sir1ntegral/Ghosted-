@@ -83,6 +83,34 @@ def test_qr_encode_and_svg():
 
 
 # ── preferences ──────────────────────────────────────────────────────────────────
+def test_email_provider_autoconfig(isolated):
+    from ghosted import mail
+
+    g = mail.provider_config("002moore@gmail.com")
+    assert g["imap"]["host"] == "imap.gmail.com" and g["imap"]["port"] == 993
+    assert g["smtp"]["host"] == "smtp.gmail.com" and g["known"]
+    # unknown domain → generic fallback
+    u = mail.provider_config("x@mycompany.org")
+    assert u["imap"]["host"] == "imap.mycompany.org" and not u["known"]
+    # set_account with blank host auto-fills from the email
+    r = mail.set_account("002moore@gmail.com", "imap", "", 0, "")
+    assert r["002moore@gmail.com"]["host"] == "imap.gmail.com"
+
+
+def test_wireguard_mesh_enrollment(isolated):
+    from ghosted import vault
+
+    names = vault.build_and_seal_mesh(
+        [("phone", ""), ("laptop", "203.0.113.5:51820"), ("nuc", "")],
+        "master-pw-123", hub="nuc",
+    )
+    assert set(names) == {"phone", "laptop", "nuc"}
+    assert vault.has_mesh()
+    cfgs = vault.unseal_mesh("master-pw-123")
+    conf = cfgs["phone"]
+    assert "[Interface]" in conf and "PrivateKey" in conf and "[Peer]" in conf
+
+
 def test_preferences_validate_and_persist(isolated):
     preferences.update({"display_name": "Lucy", "accent": "green", "notifications": "on"})
     assert preferences.get("display_name") == "Lucy"

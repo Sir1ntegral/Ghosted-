@@ -130,6 +130,46 @@ def _accounts_path() -> str:
     return os.path.join(_data_root(), "email_accounts.json")
 
 
+# Known provider server settings → auto-fill IMAP/POP/SMTP when a user enters their own
+# email, so they don't have to look it up. Generic fallback derives from the domain.
+_PROVIDERS = {
+    "gmail.com": ("imap.gmail.com", "pop.gmail.com", "smtp.gmail.com"),
+    "googlemail.com": ("imap.gmail.com", "pop.gmail.com", "smtp.gmail.com"),
+    "outlook.com": ("outlook.office365.com", "outlook.office365.com", "smtp-mail.outlook.com"),
+    "hotmail.com": ("outlook.office365.com", "outlook.office365.com", "smtp-mail.outlook.com"),
+    "live.com": ("outlook.office365.com", "outlook.office365.com", "smtp-mail.outlook.com"),
+    "msn.com": ("outlook.office365.com", "outlook.office365.com", "smtp-mail.outlook.com"),
+    "yahoo.com": ("imap.mail.yahoo.com", "pop.mail.yahoo.com", "smtp.mail.yahoo.com"),
+    "ymail.com": ("imap.mail.yahoo.com", "pop.mail.yahoo.com", "smtp.mail.yahoo.com"),
+    "aol.com": ("imap.aol.com", "pop.aol.com", "smtp.aol.com"),
+    "icloud.com": ("imap.mail.me.com", "imap.mail.me.com", "smtp.mail.me.com"),
+    "me.com": ("imap.mail.me.com", "imap.mail.me.com", "smtp.mail.me.com"),
+    "zoho.com": ("imap.zoho.com", "pop.zoho.com", "smtp.zoho.com"),
+    "gmx.com": ("imap.gmx.com", "pop.gmx.com", "mail.gmx.com"),
+    "fastmail.com": ("imap.fastmail.com", "pop.fastmail.com", "smtp.fastmail.com"),
+    "protonmail.com": ("127.0.0.1", "127.0.0.1", "127.0.0.1"),  # needs Proton Bridge
+    "proton.me": ("127.0.0.1", "127.0.0.1", "127.0.0.1"),
+}
+_PORTS = {"imap": 993, "pop": 995, "smtp": 587}
+
+
+def provider_config(addr: str) -> dict:
+    """Suggested server settings for an email address, from its domain. Always returns
+    a usable dict (generic imap./pop./smtp.<domain> fallback for unknown providers)."""
+    addr = (addr or "").strip().lower()
+    domain = addr.split("@")[-1] if "@" in addr else ""
+    imap, pop, smtp = _PROVIDERS.get(
+        domain, (f"imap.{domain}", f"pop.{domain}", f"smtp.{domain}") if domain else ("", "", "")
+    )
+    return {
+        "domain": domain,
+        "imap": {"host": imap, "port": _PORTS["imap"]},
+        "pop": {"host": pop, "port": _PORTS["pop"]},
+        "smtp": {"host": smtp, "port": _PORTS["smtp"]},
+        "known": domain in _PROVIDERS,
+    }
+
+
 def accounts() -> dict:
     try:
         with open(_accounts_path(), encoding="utf-8") as fh:
@@ -159,13 +199,16 @@ def set_account(
     protocol = (protocol or "imap").strip().lower()
     if protocol not in ("imap", "pop", "smtp"):
         raise ValueError("protocol must be imap, pop, or smtp")
+    host = (host or "").strip()
+    if not host:  # auto-fill the server from the email's provider/domain
+        host = provider_config(addr)[protocol]["host"]
     if not port:
-        port = {"imap": 993, "pop": 995, "smtp": 465}[protocol]
+        port = _PORTS[protocol]
     data = accounts()
     existing = data.get(addr.lower(), {})
     cfg = {
         "protocol": protocol,
-        "host": host.strip(),
+        "host": host,
         "port": int(port),
         "username": (username or addr).strip(),
         "use_ssl": bool(use_ssl),
