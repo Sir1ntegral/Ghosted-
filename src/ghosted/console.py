@@ -203,6 +203,32 @@ def menu() -> None:
     ).strip()
     print(actions)
     session = {"pw": None}  # app-login state: holds the unlocked master password
+    # GUI-first: launching the app (e.g. the desktop icon) auto-opens the search
+    # website in the browser so it "just works", while this console stays available
+    # for setup/advanced commands. Disable with env GHOSTED_NO_AUTOHOME=1.
+    if os.environ.get("GHOSTED_NO_AUTOHOME", "") not in ("1", "true", "yes"):
+        try:
+            import threading
+            import time as _time
+            import webbrowser
+
+            from ghosted import homepage
+
+            port = homepage._PORT
+            t = threading.Thread(target=homepage.serve, args=(port,), daemon=True)
+            t.start()
+            session["home_thread"] = t
+            session["home_port"] = port
+            _time.sleep(0.7)  # let it bind before opening the browser
+            url = f"http://127.0.0.1:{port}"
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+            print(f"\n[ghosted] your search website is open in the browser: {url}")
+            print("          create your account there (👤 Account), or type 'setup' here.\n")
+        except Exception:
+            pass  # headless / port busy → the console still works
     while True:
         try:
             raw = input("ghost> ").strip()
