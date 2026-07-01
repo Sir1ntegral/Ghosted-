@@ -83,6 +83,35 @@ def test_logout_forgets_persisted_session(tmp_path, monkeypatch):
     assert tok not in homepage._SESSIONS
 
 
+def test_dpapi_mailkey_restored_after_restart(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    import base64
+
+    import pytest
+
+    from ghosted import dpapi, homepage
+
+    if not dpapi.available():
+        pytest.skip("DPAPI unavailable (non-Windows)")
+    _reset(homepage)
+    tok = "tok-mk"
+    exp = time.time() + homepage._REMEMBER_TTL
+    pw = "correcthorsebatterystaple"
+    with homepage._SESSIONS_LOCK:
+        homepage._REMEMBER[tok] = exp
+        homepage._REMEMBER_MK[tok] = base64.b64encode(dpapi.protect(pw.encode())).decode()
+        homepage._save_persisted_sessions()
+    # the plaintext passphrase is NEVER in the file (only the DPAPI blob)
+    with open(homepage._sessions_path(), encoding="utf-8") as fh:
+        assert pw not in fh.read()
+    # simulate an app restart: the mailbox key is restored without re-entering the pw
+    _reset(homepage)
+    with homepage._MAIL_LOCK:
+        homepage._MAIL_KEYS.clear()
+    homepage._ensure_sessions_loaded()
+    assert homepage._MAIL_KEYS.get(tok, (None,))[0] == pw
+
+
 def test_master_password_never_written_to_sessions_file(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     from ghosted import homepage

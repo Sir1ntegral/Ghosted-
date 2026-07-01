@@ -11,6 +11,7 @@ egress IP (what the ISP / Tor exit sees).
 """
 from __future__ import annotations
 
+import base64
 import html
 import json
 import os
@@ -630,6 +631,7 @@ def _results_page(query: str, ctx: dict | None = None) -> str:
 # must unlock with the vault master password — then it rides a session cookie.
 _SESSIONS: dict = {}  # token -> expiry epoch
 _REMEMBER: dict = {}  # token -> expiry — the persisted (stay-logged-in) subset
+_REMEMBER_MK: dict = {}  # token -> base64 DPAPI-wrapped mailbox key (Windows, opt-in)
 _SESSIONS_LOADED = False  # lazy one-time load of persisted sessions
 _SESSIONS_LOCK = threading.Lock()
 _SESSION_TTL = 12 * 3600  # sessions expire after 12h
@@ -657,6 +659,7 @@ def _ensure_sessions_loaded() -> None:
     global _SESSIONS_LOADED
     if _SESSIONS_LOADED:
         return
+    to_seed: list = []
     with _SESSIONS_LOCK:
         if _SESSIONS_LOADED:
             return
@@ -664,25 +667,51 @@ def _ensure_sessions_loaded() -> None:
             with open(_sessions_path(), encoding="utf-8") as fh:
                 data = json.load(fh)
             now = time.time()
-            for tok, exp in (data or {}).items():
-                if isinstance(exp, (int, float)) and exp > now:
-                    _SESSIONS[tok] = exp
-                    _REMEMBER[tok] = exp
+            for tok, val in (data or {}).items():
+                # accept both the old {token: exp} and new {token: {exp, mk}} formats
+                exp, mk = (val.get("exp"), val.get("mk")) if isinstance(val, dict) else (val, None)
+                if not isinstance(exp, (int, float)) or exp <= now:
+                    continue
+                _SESSIONS[tok] = exp
+                _REMEMBER[tok] = exp
+                if mk:
+                    _REMEMBER_MK[tok] = mk
+                    to_seed.append((tok, mk, exp))
         except Exception:
             pass
         _SESSIONS_LOADED = True
+    # Restore the mailbox key (DPAPI unwrap, user-bound) OUTSIDE the sessions lock, so a
+    # remembered session opens /mail without re-prompting. Fails soft to re-unlock.
+    for tok, mk, exp in to_seed:
+        try:
+            from ghosted import dpapi
+
+            raw = dpapi.unprotect(base64.b64decode(mk))
+            if raw:
+                with _MAIL_LOCK:
+                    _MAIL_KEYS[tok] = (raw.decode(), exp)
+        except Exception:
+            pass
 
 
 def _save_persisted_sessions() -> None:
     """Write the current stay-logged-in sessions to disk (0600), dropping expired ones.
-    Call under _SESSIONS_LOCK."""
+    Stores token -> {exp, mk?} where mk is the DPAPI-wrapped mailbox key (never the
+    plaintext). Call under _SESSIONS_LOCK."""
     now = time.time()
     for t in [t for t, e in _REMEMBER.items() if e <= now]:
         _REMEMBER.pop(t, None)
+        _REMEMBER_MK.pop(t, None)
+    data = {}
+    for t, e in _REMEMBER.items():
+        entry: dict = {"exp": e}
+        if _REMEMBER_MK.get(t):
+            entry["mk"] = _REMEMBER_MK[t]
+        data[t] = entry
     try:
         p = _sessions_path()
         with open(p, "w", encoding="utf-8") as fh:
-            json.dump(_REMEMBER, fh)
+            json.dump(data, fh)
         try:
             os.chmod(p, 0o600)
         except OSError:
@@ -757,6 +786,7 @@ def _is_authed(handler) -> bool:
         if exp <= time.time():  # expired → evict + deny
             _SESSIONS.pop(tok, None)
             if _REMEMBER.pop(tok, None) is not None:
+                _REMEMBER_MK.pop(tok, None)
                 _save_persisted_sessions()
             return False
         return True
@@ -1442,6 +1472,7 @@ class _Handler(BaseHTTPRequestHandler):
             tok = _cookie_token(self)
             with _SESSIONS_LOCK:
                 _SESSIONS.pop(tok, None)
+                _REMEMBER_MK.pop(tok, None)
                 if _REMEMBER.pop(tok, None) is not None:
                     _save_persisted_sessions()  # forget the persisted login too
             with _MAIL_LOCK:  # drop the in-memory mailbox key too
@@ -1570,12 +1601,25 @@ class _Handler(BaseHTTPRequestHandler):
             for _k in [k for k, v in _SESSIONS.items() if v <= now]:
                 _SESSIONS.pop(_k, None)
                 _REMEMBER.pop(_k, None)
+                _REMEMBER_MK.pop(_k, None)
             if len(_SESSIONS) >= _SESSIONS_MAX:
                 _SESSIONS.clear()
                 _REMEMBER.clear()
+                _REMEMBER_MK.clear()
             _SESSIONS[tok] = now + ttl
             if remember:  # persist so the login survives an app restart
                 _REMEMBER[tok] = now + ttl
+                # opt-in: DPAPI-wrap the mailbox key (user-bound) so the mailbox opens
+                # after a restart too. Never the plaintext; Windows-only, fails soft.
+                if passphrase:
+                    try:
+                        from ghosted import dpapi
+
+                        blob = dpapi.protect(passphrase.encode())
+                        if blob:
+                            _REMEMBER_MK[tok] = base64.b64encode(blob).decode()
+                    except Exception:
+                        pass
                 _save_persisted_sessions()
         # Login once: seed the mailbox key under the NEW session token (this request
         # carried no cookie yet), so /mail opens without a second password prompt.
