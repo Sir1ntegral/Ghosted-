@@ -40,6 +40,12 @@ def _mesh_path() -> str:
     return os.path.join(_vault_dir(), "mesh.box")
 
 
+def _mesh_state_path() -> str:
+    # Reconstructable mesh STATE (device keys + PSK map) so peers can be enrolled
+    # incrementally without regenerating everyone's keys. Sealed like everything else.
+    return os.path.join(_vault_dir(), "mesh_state.box")
+
+
 def _seal(obj: Any, passphrase: str) -> str:
     from ghosted.crypto import encrypt
 
@@ -86,12 +92,13 @@ def change_password(old: str, new: str) -> bool:
         return False
     if not new or len(new) < 12:
         raise ValueError("new passphrase too short (min 12 chars)")
-    mesh = None
-    if has_mesh():
-        mesh = unseal_mesh(old)
+    mesh = unseal_mesh(old) if has_mesh() else None
+    state = read_mesh_state(old) if has_mesh_state() else None
     initialize(new)
     if mesh is not None:
         _write_mesh(mesh, new)  # 'new' was just set as the verifier; skip re-login KDF
+    if state is not None:
+        write_mesh_state(state, new)
     return True
 
 
@@ -119,6 +126,25 @@ def unseal_mesh(passphrase: str) -> dict:
     if not login(passphrase):
         raise PermissionError("vault locked: wrong or unset master password")
     with open(_mesh_path(), "r", encoding="ascii") as fh:
+        return _unseal(fh.read(), passphrase)
+
+
+# ── mesh STATE (for incremental enrollment) ────────────────────────────────────
+def has_mesh_state() -> bool:
+    return os.path.exists(_mesh_state_path())
+
+
+def write_mesh_state(state: dict, passphrase: str) -> None:
+    """Seal the reconstructable mesh state (no login check — callers already verified)."""
+    with open(_mesh_state_path(), "w", encoding="ascii") as fh:
+        fh.write(_seal(state, passphrase))
+
+
+def read_mesh_state(passphrase: str) -> dict:
+    """Open the sealed mesh state. Requires a valid login."""
+    if not login(passphrase):
+        raise PermissionError("vault locked: wrong or unset master password")
+    with open(_mesh_state_path(), "r", encoding="ascii") as fh:
         return _unseal(fh.read(), passphrase)
 
 
