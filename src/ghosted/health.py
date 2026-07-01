@@ -244,6 +244,14 @@ def _security() -> dict[str, Any]:
         out["vault"] = "initialized" if vault.is_initialized() else "not set"
     except Exception:
         out["vault"] = "unknown"
+    try:
+        from ghosted import defense  # unified self-defense posture
+
+        d = defense.status()
+        out["defense"] = "online" if d.get("booted") else d.get("state", "ready")
+        out["defense_pillars"] = d.get("pillars", {})
+    except Exception:
+        out["defense"] = "absent"
     out["egress_ip"] = _egress_ip()
     out["state"] = "ok" if out.get("edr") == "available" else "warn"
     return out

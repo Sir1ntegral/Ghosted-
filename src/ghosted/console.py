@@ -181,6 +181,12 @@ def menu() -> None:
         flusher.start_autoflush()
     except Exception:
         pass
+    try:  # bring Ghosted's self-defense online (Gojo + crypto + EDR + event bus)
+        from ghosted import defense
+
+        defense.boot("ghosted-console")
+    except Exception:
+        pass
     try:  # bring Tor up in the background so the Tor face is always ready
         import threading as _t
 
@@ -201,6 +207,7 @@ def menu() -> None:
           login             unlock / set the master password (vault + mesh)
           network           build a WireGuard mesh, sealed in the vault (login first)
           wg <sub> [name]   WireGuard: status|roster|enroll|join|connect|disconnect
+          defense           Ghosted self-defense posture (Gojo + crypto + EDR + bus)
           encrypt <text>    seal text with GHOSTED-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
@@ -485,6 +492,10 @@ def handle_command(
                 )
             }
         )
+    elif cmd == "defense":
+        from ghosted import defense
+
+        out(defense.status())
     elif cmd == "wg":
         # WireGuard: enroll devices (both directions), connect/disconnect real tunnels.
         from ghosted import wg_enroll, wg_tunnel

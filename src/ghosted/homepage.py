@@ -1876,6 +1876,12 @@ def serve(port: int = _PORT) -> None:
         flusher.start_autoflush()
     except Exception:
         pass
+    try:  # bring Ghosted's self-defense online (Gojo + crypto + EDR + event bus)
+        from ghosted import defense
+
+        defense.boot("ghosted-homepage")
+    except Exception:
+        pass
     try:  # bring Tor up in the background so the Tor egress face is always ready
         import threading as _t2
 
