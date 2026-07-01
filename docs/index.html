@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghosted — sovereign privacy browser + console</title>
+<meta name="description" content="Ghosted — a sovereign, self-contained Windows privacy tool: stealth console, search homepage, private email, WireGuard mesh, and its own bundled Tor. No cloud, no dependencies.">
+<style>
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;min-height:100vh;color:#e9ecf6;font-family:system-ui,'Segoe UI',Inter,Roboto,Arial,sans-serif;
+   background:radial-gradient(1200px 620px at 50% -12%,#1a2046 0%,#0d1020 56%,#090b16 100%);line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto;padding:0 22px}
+  header{text-align:center;padding:16vh 0 8vh}
+  .logo{font-size:64px;font-weight:300;letter-spacing:.5px}
+  .logo b{font-weight:600;background:linear-gradient(90deg,#9aa9ff,#c8b6ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{color:#8b93bd;font-size:17px;margin:14px 0 34px}
+  .btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-block;padding:15px 30px;border-radius:30px;font-size:16.5px;font-weight:600;text-decoration:none;
+   box-shadow:0 10px 34px rgba(0,0,0,.4);transition:transform .12s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-dl{color:#0d1020;background:linear-gradient(90deg,#9aa9ff,#c8b6ff)}
+  .btn-alt{color:#e9ecf6;background:rgba(22,26,48,.85);border:1px solid #2a2f55}
+  .muted{color:#7e88b5;font-size:13.5px;margin-top:16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin:4vh 0 8vh}
+  .card{background:rgba(22,26,48,.6);border:1px solid #2a2f55;border-radius:14px;padding:18px 20px}
+  .card h3{margin:0 0 6px;font-size:16px}
+  .card p{margin:0;color:#9aa9ff;font-size:13.5px}
+  h2{text-align:center;font-weight:600;margin:2vh 0 3vh}
+  .install{background:rgba(22,26,48,.6);border:1px solid #2a2f55;border-radius:12px;padding:14px 18px;
+   font:13px ui-monospace,Consolas,monospace;color:#cfe;overflow:auto;margin:10px 0}
+  footer{text-align:center;color:#6c76a0;font-size:13px;padding:6vh 0 8vh}
+  a{color:#9aa9ff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🐰 <b>Ghosted</b></div>
+    <div class="tag">A sovereign, self-contained privacy tool for Windows.<br>
+      Search · private email · WireGuard mesh — on its own engines, with its own Tor.</div>
+    <div class="btns">
+      <a class="btn btn-dl" href="https://github.com/Sir1ntegral/Ghosted-/releases/latest/download/Ghosted-Setup.exe">⬇ Download for Windows</a>
+      <a class="btn btn-alt" href="https://github.com/Sir1ntegral/Ghosted-">View source on GitHub</a>
+    </div>
+    <div class="muted">One installer, no admin, ~175 MB. Everything's bundled — including Tor.<br>
+      New publisher: Windows SmartScreen may say "unknown publisher" — choose <b>More info → Run anyway</b>.</div>
+  </header>
+
+  <div class="grid">
+    <div class="card"><h3>🔎 Sovereign search</h3><p>A Google-like homepage with meaning-aware ranking — masked TLS fetches, no Google APIs.</p></div>
+    <div class="card"><h3>🔒 Its own Tor</h3><p>Anonymized egress out of the box. Bundled tor.exe, clearnet fallback so it's never blocked.</p></div>
+    <div class="card"><h3>✉ Private email</h3><p>Real send/receive (SMTP/IMAP/POP), sealed at rest under your master password.</p></div>
+    <div class="card"><h3>🌐 WireGuard mesh</h3><p>Enroll your devices, connect real tunnels — keys sealed in your vault, Gojo-guarded.</p></div>
+    <div class="card"><h3>🛡 Self-defense</h3><p>Gojo boundary + EDR-lite + sovereign crypto protect the app's own integrity.</p></div>
+    <div class="card"><h3>🧩 Standalone</h3><p>No cloud, no other-project dependency. Everything to run the full browser is in the package.</p></div>
+  </div>
+
+  <h2>Install</h2>
+  <div class="install"># One-click: download the installer above and run it (per-user, desktop icon, auto-launches).</div>
+  <div class="install"># Or from source (Python 3.11+):
+git clone https://github.com/Sir1ntegral/Ghosted-.git &amp;&amp; cd Ghosted-
+pip install -e .
+ghosted            # stealth console (opens the homepage)</div>
+
+  <footer>
+    Ghosted is dual-use security tooling for your own devices, research, and defensive use.<br>
+    © 2026 Sir1ntegral · <a href="https://github.com/Sir1ntegral/Ghosted-/releases/latest">Latest release</a> ·
+    <a href="https://github.com/Sir1ntegral/Ghosted-">Source</a>
+  </footer>
+</div>
+</body>
+</html>
