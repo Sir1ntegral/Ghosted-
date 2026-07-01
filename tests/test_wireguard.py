@@ -94,6 +94,33 @@ def test_tunnel_connect_never_fakes_when_wireguard_absent(tmp_path, monkeypatch)
     assert res["ok"] is False and res.get("exported")  # exported, not connected
 
 
+def test_remote_wireguard_enroll_denied_by_source_boundary(tmp_path, monkeypatch):
+    _vault(tmp_path, monkeypatch)
+    from ghosted import wg_enroll
+
+    r = wg_enroll.add_peer("phone", passphrase=PW, source_class="network_remote")
+    assert r["ok"] is False and r.get("reason") == "source_not_permitted"
+
+
+def test_local_wireguard_enroll_allowed(tmp_path, monkeypatch):
+    _vault(tmp_path, monkeypatch)
+    from ghosted import wg_enroll
+
+    assert wg_enroll.add_peer("phone", passphrase=PW, source_class="internal")["ok"]
+
+
+def test_source_class_derived_from_client_ip():
+    from ghosted import homepage
+
+    class H:
+        def __init__(self, ip):
+            self.client_address = (ip, 1)
+
+    assert homepage._request_source_class(H("127.0.0.1")) == "internal"
+    assert homepage._request_source_class(H("10.44.0.3")) == "network_mesh"
+    assert homepage._request_source_class(H("8.8.8.8")) == "network_remote"
+
+
 def test_guard_gojo_allows_and_audits(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     from ghosted import event_bus, security

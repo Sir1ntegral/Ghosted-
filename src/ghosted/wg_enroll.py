@@ -116,13 +116,16 @@ def _persist(mesh, passphrase: str) -> dict:
 
 
 # ── public API ─────────────────────────────────────────────────────────────────
-def add_peer(name: str, endpoint: str = "", passphrase: str = "", *, hub: str = "") -> dict:
+def add_peer(name: str, endpoint: str = "", passphrase: str = "", *, hub: str = "",
+             source_class: str = "internal") -> dict:
     """Hub provisions a new device: mint its keys, seal state, return its config.
 
-    Guarded by Gojo. The returned ``config`` is ready to import into WireGuard (or
+    Guarded by Gojo (caller passes the REAL source_class so a remote request is denied
+    at the boundary). The returned ``config`` is ready to import into WireGuard (or
     render as a QR). Idempotent-safe: a duplicate name is rejected, not silently reused.
     """
-    v = security.guard(action="wireguard_enroll", metadata={"device": name, "endpoint": endpoint})
+    v = security.guard(action="wireguard_enroll", source_class=source_class,
+                       metadata={"device": name, "endpoint": endpoint})
     if v.get("decision") != "allow":
         return {"ok": False, "error": "blocked by boundary", "reason": v.get("reason")}
     mesh = _load_or_new(passphrase, hub=hub)
@@ -168,7 +171,7 @@ def enroll_peer_pubkey(name: str, public_key: str, passphrase: str, *,
 
 def join_mesh(this_name: str, hub_public_key: str, hub_endpoint: str, passphrase: str, *,
               subnet: str = _DEFAULT_SUBNET, hub_address: str = "10.44.0.1",
-              my_address: str = "10.44.0.9") -> dict:
+              my_address: str = "10.44.0.9", source_class: str = "internal") -> dict:
     """THIS machine joins an existing mesh. Generates its OWN keys locally (private key
     never leaves this device), seals the resulting config, and returns this device's
     public key + address to hand back to the hub operator so they can add us."""
@@ -179,7 +182,8 @@ def join_mesh(this_name: str, hub_public_key: str, hub_endpoint: str, passphrase
         gen_private_key, is_valid_public_key,
     )
 
-    v = security.guard(action="wireguard_join", metadata={"device": this_name, "endpoint": hub_endpoint})
+    v = security.guard(action="wireguard_join", source_class=source_class,
+                       metadata={"device": this_name, "endpoint": hub_endpoint})
     if v.get("decision") != "allow":
         return {"ok": False, "error": "blocked by boundary", "reason": v.get("reason")}
     if not vault.login(passphrase):

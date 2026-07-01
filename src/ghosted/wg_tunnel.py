@@ -87,17 +87,19 @@ def _write_conf(name: str, conf_text: str) -> str:
     return path
 
 
-def connect(name: str, conf_text: str, *, actor_role: str = "operator") -> dict:
+def connect(name: str, conf_text: str, *, actor_role: str = "operator",
+            source_class: str = "internal") -> dict:
     """Bring tunnel *name* UP from *conf_text* as a real WireGuard service.
 
-    Guarded by Gojo first; then, if WireGuard for Windows is present, installs the
-    tunnel service. If WireGuard is absent, exports the .conf and returns ok=False with
-    a clear hint — it never reports a connection that did not happen.
+    Guarded by Gojo first (the caller passes the REAL source_class of the request, so a
+    remote request is denied at the boundary); then, if WireGuard for Windows is present,
+    installs the tunnel service. If WireGuard is absent, exports the .conf and returns
+    ok=False with a clear hint — it never reports a connection that did not happen.
     """
     verdict = security.guard(
         action="wireguard_connect",
         actor_role=actor_role,
-        source_class="internal",
+        source_class=source_class,
         metadata={"name": name},
     )
     if verdict.get("decision") != "allow":
@@ -144,12 +146,16 @@ def connect(name: str, conf_text: str, *, actor_role: str = "operator") -> dict:
     return result
 
 
-def disconnect(name: str, *, actor_role: str = "operator") -> dict:
+def disconnect(name: str, *, actor_role: str = "operator",
+               source_class: str = "internal") -> dict:
     """Bring tunnel *name* DOWN (uninstall its WireGuard service). Guarded + audited."""
-    security.guard(
+    verdict = security.guard(
         action="wireguard_disconnect", actor_role=actor_role,
-        source_class="internal", metadata={"name": name},
+        source_class=source_class, metadata={"name": name},
     )
+    if verdict.get("decision") != "allow":
+        return {"ok": False, "name": name, "error": "blocked by boundary",
+                "reason": verdict.get("reason", "denied")}
     exe = wireguard_exe()
     if not exe:
         return {"ok": False, "name": name, "error": "WireGuard for Windows not installed"}

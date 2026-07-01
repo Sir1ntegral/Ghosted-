@@ -167,6 +167,19 @@ def _gate():
     return _GATE
 
 
+def _request_source_class(handler) -> str:
+    """Classify WHERE a request actually comes from, for Gojo's source boundary:
+    loopback = the operator physically at the machine (internal); 10.44.* = the trusted
+    WireGuard mesh; anything else = a remote network. Derived from the real client
+    address, never asserted by the caller — this is what makes Gojo's boundary honest."""
+    ip = handler.client_address[0] if getattr(handler, "client_address", None) else ""
+    if ip.startswith("127."):
+        return "internal"
+    if ip.startswith("10.44."):
+        return "network_mesh"
+    return "network_remote"
+
+
 def _gojo_admits(client_ip: str, path: str) -> bool:
     """Admission for a network request.
 
@@ -1817,7 +1830,8 @@ class _Handler(BaseHTTPRequestHandler):
                 if not g("name"):
                     raise ValueError("a device name is required")
                 r = wg_enroll.add_peer(g("name"), endpoint=g("endpoint"),
-                                       passphrase=g("pw"), hub=g("hub"))
+                                       passphrase=g("pw"), hub=g("hub"),
+                                       source_class=_request_source_class(self))
                 if not r.get("ok"):
                     raise ValueError(r.get("error", "enrollment failed"))
                 self._send(_mesh_page({r["name"]: r["config"]}, _ctx(self),
@@ -1829,7 +1843,8 @@ class _Handler(BaseHTTPRequestHandler):
                 for req in ("name", "hub_pubkey", "hub_endpoint"):
                     if not g(req):
                         raise ValueError("name, hub public key and hub endpoint are all required")
-                r = wg_enroll.join_mesh(g("name"), g("hub_pubkey"), g("hub_endpoint"), g("pw"))
+                r = wg_enroll.join_mesh(g("name"), g("hub_pubkey"), g("hub_endpoint"), g("pw"),
+                                        source_class=_request_source_class(self))
                 if not r.get("ok"):
                     raise ValueError(r.get("error", "join failed"))
                 self._send(_mesh_page({r["name"]: r["config"]}, _ctx(self),
@@ -1841,7 +1856,7 @@ class _Handler(BaseHTTPRequestHandler):
                 conf = wg_enroll.device_config(g("name"), g("pw"))
                 if not conf:
                     raise ValueError("no such enrolled device / wrong master password")
-                r = wg_tunnel.connect(g("name"), conf)
+                r = wg_tunnel.connect(g("name"), conf, source_class=_request_source_class(self))
                 wmsg = (f"tunnel '{g('name')}' up" if r.get("ok")
                         else f"! {r.get('error', 'connect failed')}"
                              + (f" — {r['hint']}" if r.get("hint") else ""))
@@ -1850,7 +1865,7 @@ class _Handler(BaseHTTPRequestHandler):
             elif action == "wg_disconnect":
                 from ghosted import wg_tunnel
 
-                r = wg_tunnel.disconnect(g("name"))
+                r = wg_tunnel.disconnect(g("name"), source_class=_request_source_class(self))
                 wmsg = f"tunnel '{g('name')}' down" if r.get("ok") else f"! {r.get('error', r.get('detail', 'failed'))}"
                 self._send(_wireguard_page(_ctx(self), wmsg))
                 return
