@@ -1,5 +1,7 @@
 # Ghosted 🐰
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-Sir1ntegral-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/Sir1ntegral)
+
 A **sovereign, standalone** privacy tool for Windows: a stealth console, a Google-like
 search **homepage**, private **email**, a **WireGuard** device mesh, and meaning-aware
 semantic search — all on Ghosted's **own** engines. No Google APIs, no third-party
