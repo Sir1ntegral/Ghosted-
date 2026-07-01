@@ -27,6 +27,23 @@ _LIMITS: dict[str, tuple[int, float]] = {
 }
 _DEFAULT_LIMIT: tuple[int, float] = (120, 60.0)
 
+# Boundary policy: WHO (actor role) may perform each action, and FROM WHERE (source
+# class). Gojo ENFORCES this — a request outside the allowed roles/sources is denied
+# before it is ever throttled. Actions absent here carry no role/source boundary (they
+# are still rate-limited). This is what makes Gojo a boundary, not just a rate limiter:
+# e.g. only the local authenticated operator may drive WireGuard; a remote web visitor
+# may only fetch the homepage.
+_POLICY: dict[str, dict[str, frozenset[str]]] = {
+    "homepage_get": {
+        "roles": frozenset({"anonymous_web", "operator"}),
+        "sources": frozenset({"internal", "network_remote", "network_mesh"}),
+    },
+    "wireguard_connect": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
+    "wireguard_disconnect": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
+    "wireguard_enroll": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
+    "wireguard_join": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
+}
+
 
 class GojoBoundaryGate:
     """Per-(client, action) sliding-window rate limiter with JSONL audit."""
@@ -35,11 +52,15 @@ class GojoBoundaryGate:
         self,
         audit_log_path: str | None = None,
         limits: dict[str, tuple[int, float]] | None = None,
+        policy: dict[str, dict[str, frozenset[str]]] | None = None,
     ) -> None:
         self._audit = audit_log_path or ""
         self._limits = dict(_LIMITS)
         if limits:
             self._limits.update(limits)
+        self._policy = dict(_POLICY)
+        if policy:
+            self._policy.update(policy)
         self._hits: dict[tuple[str, str], deque] = defaultdict(deque)
         self._lock = threading.Lock()
 
@@ -51,7 +72,24 @@ class GojoBoundaryGate:
         source_class: str,
         metadata: dict | None = None,
     ) -> dict:
-        """Allow unless the (client, action) sliding window is over its ceiling."""
+        """Enforce the boundary (role + source class) then the per-client rate ceiling.
+
+        A request whose actor_role / source_class is outside the action's policy is
+        DENIED outright — Gojo's boundary — before any throttle accounting. Actions with
+        no policy entry skip the boundary check and are only rate-limited.
+        """
+        pol = self._policy.get(action)
+        if pol is not None:
+            if actor_role not in pol["roles"]:
+                verdict = {"decision": "deny", "reason": "role_not_permitted",
+                           "action": action, "actor_role": actor_role}
+                self._audit_write(actor_role, action, source_class, metadata, verdict)
+                return verdict
+            if source_class not in pol["sources"]:
+                verdict = {"decision": "deny", "reason": "source_not_permitted",
+                           "action": action, "source_class": source_class}
+                self._audit_write(actor_role, action, source_class, metadata, verdict)
+                return verdict
         limit, window = self._limits.get(action, _DEFAULT_LIMIT)
         client = str((metadata or {}).get("client", "?"))
         key = (client, action)
