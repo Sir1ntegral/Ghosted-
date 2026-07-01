@@ -46,6 +46,7 @@ def _cpu_percent(sample: float = 0.18) -> float | None:
             busy = (k1 - k0) + (u1 - u0) - (i1 - i0)
             total = (k1 - k0) + (u1 - u0)
             return round(100.0 * busy / total, 1) if total > 0 else 0.0
+
         # POSIX: derive from /proc/stat deltas
         def _stat():
             with open("/proc/stat") as fh:

@@ -125,10 +125,7 @@ def scan_file(
 
     verdict = "malicious" if score >= 60 else ("suspicious" if score >= 30 else "clean")
 
-    # Standalone tool: Ghosted's own heuristic scan above is the verdict. (The
-    # optional rabbit-EDR defense-in-depth consult was dropped in the decouple.)
-    rabbit_edr = None
-
+    # Standalone tool: Ghosted's own heuristic scan above IS the verdict.
     report = {
         "path": path,
         "sha256": digest,
@@ -139,7 +136,6 @@ def scan_file(
         "score": score,
         "reasons": reasons,
         "verdict": verdict,
-        "rabbit_edr": rabbit_edr,
     }
     if quarantine and verdict == "malicious":
         report["quarantined"] = _quarantine(path, digest)

@@ -194,54 +194,60 @@ def challenge(factor: str, passphrase: str) -> dict:
         "exp": time.time() + _CODE_TTL,
     }
     _save(s)
+    # Real EXTERNAL transmission (SMTP to an email, email-to-SMS to a phone) is only
+    # possible via a configured sending account with a saved password. Try that; if it
+    # genuinely sends, mark delivered. mail.compose alone only SEALS a copy into the
+    # sovereign mailbox (a record) — it is NOT transmission, so it must never be counted
+    # as "delivered". Whenever we can't truly deliver, we SHOW the code on screen (the
+    # designed fail-soft) so the account holder is never locked out.
     delivered, via = False, ""
+    if factor == "email":
+        targets = list(cfg.get("addrs", []))
+    elif factor == "phone" and cfg.get("number"):
+        digits = "".join(ch for ch in str(cfg["number"]) if ch.isdigit())
+        gw = CARRIER_GATEWAYS.get(cfg.get("carrier", ""))
+        targets = [f"{digits}@{gw}"] if gw else []
+    else:
+        targets = []
     try:
-        if factor == "email":
-            from ghosted import mail
+        from ghosted import bridge, mail
 
-            # Try each enrolled address in order; if the first can't be reached, fall
-            # through to the second, then the third.
-            for addr in cfg.get("addrs", []):
+        accounts = mail.accounts()
+        body = f"Your one-time Ghosted sign-in code is {code} (valid 10 minutes)."
+        for to in targets:
+            # 1) seal a copy into the sovereign mailbox as a record (best-effort)
+            try:
+                mail.compose(to=to, subject="Ghosted sign-in code", body=body,
+                             passphrase=passphrase)
+            except Exception:
+                pass
+            # 2) attempt REAL delivery via a configured external SMTP account
+            for sender, acfg in accounts.items():
                 try:
-                    mail.compose(
-                        to=addr,
-                        subject="Ghosted sign-in code",
-                        body=f"Your one-time Ghosted sign-in code is {code} (valid 10 minutes).",
-                        passphrase=passphrase,
+                    apw = mail.account_password(sender, passphrase)
+                    if not apw:
+                        continue
+                    prov = mail.provider_config(sender)
+                    r = bridge.send_external(
+                        to=to, subject="Ghosted sign-in code", body=body,
+                        from_addr=sender,
+                        smtp_host=acfg.get("smtp_host") or prov["smtp"]["host"],
+                        smtp_port=int(acfg.get("smtp_port") or prov["smtp"]["port"]),
+                        username=sender, password=apw,
                     )
-                    delivered, via = True, f"sovereign mail → {addr}"
-                    break
+                    if r.get("ok"):
+                        delivered, via = True, f"{'text' if factor == 'phone' else 'email'} → {to}"
+                        break
                 except Exception:
-                    continue  # this address failed — try the next fallback
-        elif factor == "phone" and cfg.get("number"):
-            number, carrier = cfg["number"], cfg.get("carrier", "")
-            gateway = CARRIER_GATEWAYS.get(carrier)
-            if gateway:
-                # Email-to-SMS: a code mailed to <number>@<gateway> arrives as a text.
-                from ghosted import mail
-
-                digits = "".join(ch for ch in number if ch.isdigit())
-                try:
-                    mail.compose(
-                        to=f"{digits}@{gateway}",
-                        subject="Ghosted code",
-                        body=f"Ghosted sign-in code: {code}",
-                        passphrase=passphrase,
-                    )
-                    delivered, via = True, f"text message → {number} ({carrier})"
-                except Exception:
-                    delivered = False
-            else:
-                from ghosted import connectivity
-
-                delivered = bool(connectivity.online(timeout=2.0))
-                via = f"text message → {number}" if delivered else ""
+                    continue
+            if delivered:
+                break
     except Exception:
         delivered = False
-    # Fail-soft: when we couldn't deliver (offline / no gateway), show it on screen.
     out = {"factor": factor, "delivered": delivered, "via": via}
-    if not delivered:
+    if not delivered:  # honest fail-soft — show the code so sign-in always works
         out["shown"] = code
+        out["via"] = "shown on screen (no external delivery configured)"
     return out
 
 

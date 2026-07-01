@@ -728,6 +728,8 @@ def _save_persisted_sessions() -> None:
             pass
     except Exception:
         pass
+
+
 _LOGIN_FAILS: dict = {}  # ip -> (fail_count, window_start) — brute-force guard
 _LOGIN_MAX = 5  # failures per window before lockout
 _LOGIN_WINDOW = 300  # 5 min
@@ -947,7 +949,7 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
     _ext = len(mail.accounts())
     _status_summary = (
         '<div class="acct" style="margin-bottom:6px"><h3 style="border-top:none;padding-top:0">Status</h3>'
-        f'<div class="row">Account <span class="s-ok">✓ created</span>'
+        '<div class="row">Account <span class="s-ok">✓ created</span>'
         + (f' · signed in as <b>{html.escape(prefs["display_name"])}</b>' if prefs["display_name"] else '')
         + '</div>'
         f'<div class="row">Two-factor {_two} <span class="muted">· {_fac} factor(s): '
@@ -973,11 +975,12 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
         + '</div>'
         for a in ids
     )
+
     def acct_block(a, c):
         saved = "🔑 password saved" if c.get("pw_blob") else "no saved password"
         return (
-            f'<div class="row">{html.escape(a)} — {html.escape(c.get("protocol",""))} '
-            f'{html.escape(c.get("host",""))}:{c.get("port","")} '
+            f'<div class="row">{html.escape(a)} — {html.escape(c.get("protocol", ""))} '
+            f'{html.escape(c.get("host", ""))}:{c.get("port", "")} '
             f'<span class="muted">· {saved}</span>' + _rm("remove_account", "email", a) + '</div>'
             f'<form action="/account" method="post"><input type="hidden" name="action" value="set_account_pw">'
             f'<input type="hidden" name="email" value="{html.escape(a)}">'
@@ -1018,7 +1021,7 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
         for q in reversed(hist)
     ) or '<div class="row muted">no recent searches</div>'
     note_rows = "".join(
-        f'<div class="row {("s-warn" if n["level"]=="warn" else "s-critical" if n["level"]=="critical" else "")}">'
+        f'<div class="row {("s-warn" if n["level"] == "warn" else "s-critical" if n["level"] == "critical" else "")}">'
         f'{html.escape(n["text"])} '
         f'<a href="/account" onclick="fetch(\'/note/dismiss?id={quote(n["id"])}\',{{method:\'POST\'}}).then(()=>location.reload());return false" '
         f'style="color:#6f7aa0;float:right">dismiss</a></div>'
@@ -1026,7 +1029,7 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
     ) or '<div class="row muted">no notifications' + ('' if prefs["notifications"] else ' (turn them on below)') + '</div>'
 
     def opt(sel_val, val, text):
-        return f'<option value="{val}"{" selected" if sel_val==val else ""}>{text}</option>'
+        return f'<option value="{val}"{" selected" if sel_val == val else ""}>{text}</option>'
 
     accents = "".join(opt(prefs["accent"], a, a) for a in preferences.ACCENTS)
 
@@ -1198,7 +1201,7 @@ def _wireguard_page(ctx: dict | None = None, msg: str = "",
                 up = " · <span class=\"s-ok\">up</span>" if d["name"] in active else ""
                 rows += (
                     f'<div class="row">{html.escape(d["name"])} — '
-                    f'{html.escape(d["address"])} · {html.escape(d.get("endpoint",""))}{up}'
+                    f'{html.escape(d["address"])} · {html.escape(d.get("endpoint", ""))}{up}'
                     f'<form action="/account" method="post" style="display:inline;margin-left:8px">'
                     f'<input type="hidden" name="action" value="wg_remove">'
                     f'<input type="hidden" name="name" value="{html.escape(d["name"])}">'
@@ -1341,10 +1344,10 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
             m = mail.read(boxes[read_idx], pw)
             reading = (
                 '<div class="acct"><h3>Message</h3>'
-                f'<div class="row">from: <b>{html.escape(str(m.get("from","")))}</b></div>'
-                f'<div class="row">to: {html.escape(str(m.get("to","")))}</div>'
-                f'<div class="row">subject: <b>{html.escape(str(m.get("subject","")))}</b></div>'
-                f'<div class="row" style="white-space:pre-wrap">{html.escape(str(m.get("body","")))}</div>'
+                f'<div class="row">from: <b>{html.escape(str(m.get("from", "")))}</b></div>'
+                f'<div class="row">to: {html.escape(str(m.get("to", "")))}</div>'
+                f'<div class="row">subject: <b>{html.escape(str(m.get("subject", "")))}</b></div>'
+                f'<div class="row" style="white-space:pre-wrap">{html.escape(str(m.get("body", "")))}</div>'
                 '<div class="tag"><a href="/mail" style="color:#9aa9ff;text-decoration:none">← inbox</a></div></div>'
             )
         except Exception:
@@ -1368,7 +1371,6 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
         rows.append(f'<div class="row"><a href="/mail?id={i}" style="color:#9aa9ff;text-decoration:none">'
                     f'<b>{subj}</b> <span class="muted">— {frm}</span></a></div>')
     inbox_rows = "".join(rows) or '<div class="row muted">inbox empty</div>'
-    accts = "".join(f'<option value="{html.escape(a)}">{html.escape(a)}</option>' for a in mail.accounts())
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Mail</title>
 <style>{_CSS}</style>{_accent_style(ctx)}</head><body>
 {_toolbar(ctx)}
@@ -1701,6 +1703,7 @@ class _Handler(BaseHTTPRequestHandler):
         if not pw:
             self._send(_mail_unlock_page(ctx))
             return
+
         def _port(s, default):
             if not s:
                 return default
@@ -1727,8 +1730,18 @@ class _Handler(BaseHTTPRequestHandler):
                     )
                     msg = f"sent to {to} via external email"
                 else:
-                    mail.send(to, subject, mbody, pw)
-                    msg = f"message sent to {to} on the mesh"
+                    box = mail.send(to, subject, mbody, pw)
+                    # best-effort peer push over the mesh; mail.send always seals a
+                    # local sovereign-mailbox copy regardless, so report honestly.
+                    pushed = False
+                    try:
+                        from ghosted import mesh_mail
+
+                        pushed = bool(mesh_mail.deliver(to, box)) if hasattr(mesh_mail, "deliver") else False
+                    except Exception:
+                        pushed = False
+                    msg = (f"delivered to {to} over the mesh" if pushed
+                           else f"sealed to your sovereign mailbox for {to}")
             elif action == "pull":
                 from ghosted import imap_pull
 

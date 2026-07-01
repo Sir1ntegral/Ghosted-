@@ -67,7 +67,6 @@ def _serialize(mesh) -> dict:
 
 
 def _mesh_from_state(state: dict):
-    from ghosted._sovereign_wireguard import derive_public_key
     from ghosted.wireguard import PackMesh
 
     mesh = PackMesh(
@@ -155,15 +154,18 @@ def add_peer(name: str, endpoint: str = "", passphrase: str = "", *, hub: str = 
 
 
 def enroll_peer_pubkey(name: str, public_key: str, passphrase: str, *,
-                       endpoint: str = "") -> dict:
+                       endpoint: str = "", source_class: str = "internal") -> dict:
     """Register a device that generated its OWN keys and handed back its public key.
 
     Ghosted never sees that device's private key — it only records the public key and
-    an address so the hub can route to it. Returns the hub-side confirmation.
+    an address so the hub can route to it. Guarded by Gojo (caller passes the real
+    source_class so a remote request is denied at the boundary, like the other enroll
+    paths). Returns the hub-side confirmation.
     """
     from ghosted._sovereign_wireguard import decode_key, is_valid_public_key
 
-    v = security.guard(action="wireguard_enroll", metadata={"device": name})
+    v = security.guard(action="wireguard_enroll", source_class=source_class,
+                       metadata={"device": name})
     if v.get("decision") != "allow":
         return {"ok": False, "error": "blocked by boundary", "reason": v.get("reason")}
     try:

@@ -172,6 +172,7 @@ def correct(query: str) -> dict:
         return {"original": q, "corrected": q, "changed": False, "did_you_mean": None, "tokens": []}
     out_tokens: list[str] = []
     changed = False
+
     # preserve the original spacing/casing skeleton by walking word-tokens only
     def _repl(m: re.Match) -> str:
         nonlocal changed

@@ -117,10 +117,10 @@ def _suggestion_notes(prefs) -> list[dict]:
         if top:
             t = top[0]
             out.append({
-                "id": f"suggest:top:{t.get('url','')}",
+                "id": f"suggest:top:{t.get('url', '')}",
                 "kind": "suggestion",
                 "level": "info",
-                "text": f"You return to “{t.get('query','')}” — Ghosted is ranking its best result higher.",
+                "text": f"You return to “{t.get('query', '')}” — Ghosted is ranking its best result higher.",
             })
         return out
     except Exception:

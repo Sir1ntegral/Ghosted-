@@ -4,9 +4,11 @@ Connectivity coordinator — ensure the internet always reaches out, in sync wit
 One sane, coordinated path to "always online":
   1. multi-interface reachability — probe across every local interface (wifi / LAN /
      WAN); use whatever has a path (a dead interface or port is not fatal).
-  2. sovereign egress — fetch through ghost's masked HTTP: the 5-engine TLS masks
-     (chrome/firefox/edge/safari/tor145) + Tor-by-default + clearnet fallback, so the
-     request "always enacts with the ISP" however the path is shaped.
+  2. sovereign egress — fetch through Ghosted's masked HTTP: a real-browser TLS/JA3
+     mask (curl_cffi Chrome impersonation) with a stdlib urllib fallback, so the request
+     blends in on the wire. This helper is clearnet by design; the ANONYMIZED (Tor) path
+     is the browser/sensitive fetch (web.tor_fetch + tor.py), and the egress-IP display
+     intentionally shows real exposure.
   3. store-and-forward — if utterly offline, the intent is spooled and auto-completes
      the instant any link returns.
   4. dial-up / RAS — if no link is up, dial a configured ISP (modem/PPP/VPN/broadband)
@@ -153,9 +155,10 @@ def _tor_ready() -> bool:
 
 
 def sovereign_get(url: str, *, timeout: float = 15.0) -> dict:
-    """Fetch a URL through the coordinated sovereign egress (ghost masks + Tor-by-
-    default + clearnet fallback). If utterly offline, spool the intent for
-    store-and-forward and report it — never a hard failure."""
+    """Fetch a URL through the coordinated sovereign egress — a real-browser TLS/JA3
+    mask (curl_cffi) with a urllib fallback (clearnet; for anonymized egress use the
+    Tor browser path). If utterly offline, spool the intent for store-and-forward and
+    report it — never a hard failure."""
     try:
         from ghosted.http import sovereign_http_get
 

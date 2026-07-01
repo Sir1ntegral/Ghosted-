@@ -317,7 +317,7 @@ def encode(text: str) -> list[list[int]]:
         _place_format(cand, mask)
         sc = _penalty(cand)
         if best_score is None or sc < best_score:
-            best, best_score, best_mask = cand, sc, mask
+            best, best_score = cand, sc  # mask is already baked into `cand` via _place_format
     _FUNC.clear()
     return best
 

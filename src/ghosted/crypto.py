@@ -65,7 +65,6 @@ _BLOB_MAGIC = b"\xfa\xbb"
 # Optional legacy argon2id support — used ONLY to decrypt old KDF_ARGON2ID blobs.
 # Ghosted never *produces* argon2id blobs, so this stays optional (no hard dep).
 try:
-    from cryptography.exceptions import UnsupportedAlgorithm
     from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
     _probe = Argon2id(salt=b"\x00" * 16, length=32, iterations=1, lanes=1, memory_cost=8)

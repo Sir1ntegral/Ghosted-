@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "notify_suggestions": True,
     "voice_autoread": False,
     "show_badges": True,
+    "mail_enroll_prompted": False,  # internal flag: mail setup interstitial shown once
 }
 
 _BOOL_KEYS = {
@@ -43,6 +44,7 @@ _BOOL_KEYS = {
     "notify_suggestions",
     "voice_autoread",
     "show_badges",
+    "mail_enroll_prompted",
 }
 
 

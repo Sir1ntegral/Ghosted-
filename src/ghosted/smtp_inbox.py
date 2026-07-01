@@ -141,7 +141,16 @@ def serve(port: int = 25, key: str | None = None, host: str = "0.0.0.0") -> None
     print(f"sovereign SMTP inbox on :{port} - inbound mail black-boxed at rest")
     try:
         while True:
-            conn, _addr = srv.accept()
+            conn, addr = srv.accept()
+            # Only loopback (the local operator) or the WireGuard mesh may deliver here;
+            # a connection from anywhere else on 0.0.0.0 is refused at the door.
+            if not _accept_ip(addr[0] if addr else ""):
+                try:
+                    conn.sendall(b"554 access denied\r\n")
+                    conn.close()
+                except Exception:
+                    pass
+                continue
             if not _sem.acquire(blocking=False):
                 try:
                     conn.sendall(b"421 too busy\r\n")

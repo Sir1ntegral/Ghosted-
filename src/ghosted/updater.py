@@ -23,7 +23,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 
 __all__ = ["current_version", "check", "download", "apply", "update_dir"]
 
