@@ -37,6 +37,14 @@ admin needed, and it's reversible:
 Only do this if you choose to trust the Ghosted developer. See
 [trust/](trust/) and [DISTRIBUTION.md](DISTRIBUTION.md).
 
+## Support
+
+Ghosted is built in the open by one developer — no cloud, no ads, no Big Tech. If it's
+useful to you, you can help keep it independent and shipping:
+
+**☕ [Buy me a coffee](https://buymeacoffee.com/Sir1ntegral)** — or hit the **Sponsor**
+button at the top of this repo. Backers are listed in [SUPPORTERS.md](SUPPORTERS.md).
+
 ## What it does
 
 | Face | What it is |
