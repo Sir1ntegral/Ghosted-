@@ -952,7 +952,7 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
    <input type="password" name="pw" placeholder="master password (to secure the codes)">
    <div class="btns"><button type="submit">Generate recovery codes</button></div></form>
 
-  <h3>Identities</h3>{id_rows}
+  <h3 id="email">Identities</h3>{id_rows}
   <form action="/account" method="post"><input type="hidden" name="action" value="add_identity">
    <input type="text" name="email" placeholder="add an email identity you own (used for email codes)">
    <div class="btns"><button type="submit">Add identity</button></div></form>
@@ -1061,6 +1061,28 @@ def _mesh_page(configs: dict, ctx: dict | None = None, msg: str = "") -> str:
 <div class="acct">{blocks}
 <div class="tag" style="margin-top:14px"><a href="/account" style="color:#9aa9ff;text-decoration:none">← account</a>
  &nbsp;·&nbsp; <a href="/" style="color:#9aa9ff;text-decoration:none">🏠 Home</a></div></div>
+</body></html>"""
+
+
+def _mail_enroll_page(ctx: dict) -> str:
+    """First-time email view: the user hasn't set up their own email yet, so guide
+    them to enroll (add an identity / connect an external account) instead of dropping
+    them at an unlock prompt for an empty mailbox. They can still open the private
+    sovereign mailbox directly."""
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Set up email</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:32px;margin-top:64px">✉ <b>Set up your email</b></div>
+<div class="tag">connect your email once — then read, send, receive &amp; manage it here</div>
+<div class="acct" style="text-align:center">
+  <div class="muted" style="margin:8px 0 18px">Add an email address you own, or connect an external
+   account (Gmail/Outlook/Yahoo/… — the server settings auto-fill). Everything is sealed at rest
+   under your master password.</div>
+  <div class="btns"><button onclick="location.href='/account#email'">Set up my email</button></div>
+  <div class="tag" style="margin-top:16px">
+   <a href="/mail?open=1" style="color:#9aa9ff;text-decoration:none">skip — open my private mailbox</a>
+  </div>
+</div>
 </body></html>"""
 
 
@@ -1256,6 +1278,18 @@ class _Handler(BaseHTTPRequestHandler):
             if q.get("lock"):
                 _mail_clear_key(self)
                 self._send(_mail_unlock_page(ctx, "mailbox locked"))
+                return
+            # Enrollment gate: a user who hasn't set up their own email is guided to
+            # setup; an enrolled user goes straight to their mailbox. "?open=1" lets a
+            # not-yet-enrolled user open the private sovereign mailbox anyway.
+            try:
+                from ghosted import mail as _mail
+
+                enrolled = _mail.is_enrolled()
+            except Exception:
+                enrolled = True  # fail open — never trap the user out of their mailbox
+            if not enrolled and not q.get("open"):
+                self._send(_mail_enroll_page(ctx))
                 return
             pw = _mail_get_key(self)
             if not pw:

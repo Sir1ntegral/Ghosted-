@@ -122,6 +122,16 @@ def identities() -> list:
     return [sovereign] + [a for a in own if a.lower() != sovereign.lower()]
 
 
+def is_enrolled() -> bool:
+    """True once the user has set up their OWN email — a personal identity they own
+    (beyond the default @sovereign.dmn mesh address) or an external IMAP/POP/SMTP
+    account. Drives the /mail route: not enrolled → guided setup; enrolled → mailbox."""
+    try:
+        return len(identities()) > 1 or bool(accounts())
+    except Exception:
+        return False
+
+
 # ── external email account settings (server config only — NEVER a password) ────────
 # The setup wizard's "email options". We persist the IMAP/POP/SMTP server settings so
 # the user doesn't retype them, but the PASSWORD is still supplied per pull/send call
