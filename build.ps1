@@ -58,4 +58,36 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE) — se
 if (-not (Test-Path "$repo\dist\Ghosted\Ghosted.exe")) {
     throw "PyInstaller reported success but $repo\dist\Ghosted\Ghosted.exe is missing."
 }
+
+# ── Code signing (Authenticode) — INERT until a certificate is provided ──────────────
+# An unsigned binary triggers SmartScreen / App Control warnings, which for a security
+# tool reads as untrustworthy. Configure ONE of the following to sign automatically:
+#   $env:GHOSTED_SIGN_PFX  = 'C:\path\to\cert.pfx'   $env:GHOSTED_SIGN_PASS = 'pfx-password'
+#   -- or --  $env:GHOSTED_SIGN_THUMBPRINT = '<thumbprint of a cert in the local store>'
+# With neither set the build simply skips signing (unsigned exe, same as before).
+function Sign-File([string]$path) {
+    $pfx = $env:GHOSTED_SIGN_PFX
+    $thumb = $env:GHOSTED_SIGN_THUMBPRINT
+    if (-not $pfx -and -not $thumb) {
+        Write-Host "[sign] no certificate configured -> skipping (set GHOSTED_SIGN_PFX or GHOSTED_SIGN_THUMBPRINT to enable)"
+        return
+    }
+    $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+    if (-not $signtool) {
+        $cand = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+                Sort-Object FullName -Descending | Select-Object -First 1
+        if ($cand) { $signtool = $cand.FullName }
+    }
+    if (-not $signtool) { Write-Host "[sign] signtool.exe not found (install the Windows SDK) -> skipping"; return }
+    $ts = if ($env:GHOSTED_SIGN_TS) { $env:GHOSTED_SIGN_TS } else { "http://timestamp.digicert.com" }
+    if ($pfx) {
+        & $signtool sign /fd SHA256 /f $pfx /p $env:GHOSTED_SIGN_PASS /tr $ts /td SHA256 $path
+    } else {
+        & $signtool sign /fd SHA256 /sha1 $thumb /tr $ts /td SHA256 $path
+    }
+    if ($LASTEXITCODE -eq 0) { Write-Host "[sign] signed $path" }
+    else { throw "signtool failed (exit $LASTEXITCODE) for $path" }
+}
+Sign-File "$repo\dist\Ghosted\Ghosted.exe"
+
 Write-Host "Build complete -> $repo\dist\Ghosted\Ghosted.exe"
