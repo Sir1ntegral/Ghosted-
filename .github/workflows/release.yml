@@ -1,0 +1,104 @@
+name: Release
+
+# Builds the Tor-bundled onedir, signs the exe + installer with Azure Trusted Signing,
+# and uploads Ghosted-Setup.exe to the GitHub release. Runs on a version tag (or manual
+# dispatch). INERT until you enable it: set repo variable RELEASE_SIGNING = true and the
+# secrets/vars below — otherwise the job is skipped so tags don't fail.
+#
+# Required repo secrets:  AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+#   (a Microsoft Entra service principal with the "Trusted Signing Certificate Profile
+#    Signer" role on your Artifact Signing account)
+# Required repo variables: AZURE_SIGN_ENDPOINT (e.g. https://wus3.codesigning.azure.net/),
+#   AZURE_SIGN_ACCOUNT, AZURE_SIGN_PROFILE, RELEASE_SIGNING=true
+#   (optional) TOR_EXPERT_VERSION to pin the bundled Tor.
+#
+# NOTE: verify the azure/trusted-signing-action version tag below against the marketplace
+# before first use. Signing establishes a verified publisher identity; SmartScreen
+# reputation builds over time (it is not instant for a new publisher).
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish to (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write        # upload release assets
+  id-token: write        # Azure OIDC (if you switch to federated creds)
+
+jobs:
+  build-sign-release:
+    if: ${{ vars.RELEASE_SIGNING == 'true' }}
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install deps + PyInstaller
+        run: pip install -e ".[semantic,docs,build]"
+
+      - name: Bundle Tor (best-effort)
+        shell: pwsh
+        run: |
+          $ver = '${{ vars.TOR_EXPERT_VERSION }}'
+          if (-not $ver) { $ver = '14.5.7' }
+          $url = "https://archive.torproject.org/tor-package-archive/torbrowser/$ver/tor-expert-bundle-windows-x86_64-$ver.tar.gz"
+          try {
+            Invoke-WebRequest $url -OutFile tor.tgz -TimeoutSec 180
+            New-Item -ItemType Directory -Force torx | Out-Null
+            tar -xzf tor.tgz -C torx
+            $t = Get-ChildItem torx -Recurse -Filter tor.exe | Select-Object -First 1
+            if ($t) { "GHOSTED_TOR_BUNDLE=$($t.FullName)" >> $env:GITHUB_ENV; Write-Host "bundling tor: $($t.FullName)" }
+          } catch { Write-Host "tor download failed - building without bundled Tor: $_" }
+
+      - name: Build onedir bundle (unsigned; signed in the next step)
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Sign Ghosted.exe (Azure Trusted Signing)
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.AZURE_SIGN_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.AZURE_SIGN_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGN_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist\Ghosted
+          files-folder-filter: exe
+          files-folder-recurse: true
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Sign installer (Azure Trusted Signing)
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.AZURE_SIGN_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.AZURE_SIGN_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGN_PROFILE }}
+          files-folder: ${{ github.workspace }}\installer_out
+          files-folder-filter: exe
+
+      - name: Publish signed installer to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload $env:TAG installer_out\Ghosted-Setup.exe --clobber

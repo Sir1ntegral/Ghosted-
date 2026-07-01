@@ -27,10 +27,16 @@ $env:GHOSTED_SIGN_TS = 'http://timestamp.digicert.com'   # Azure default: timest
 
 With none set, the build prints a skip notice and produces an **unsigned** exe.
 
-## Azure Artifact Signing (recommended — removes the SmartScreen warning)
+## Azure Artifact Signing (recommended)
 
-Azure Artifact Signing (formerly "Trusted Signing") is Microsoft's cloud EV code
-signing — ~$10/mo Basic, **no hardware token**, and **instant SmartScreen reputation**.
+Azure Artifact Signing (formerly "Trusted Signing") is Microsoft's cloud code signing —
+~$10/mo Basic, **no hardware token**. It establishes a **verified publisher identity**;
+reputation attaches to that identity rather than a single cert.
+
+> **SmartScreen note:** signing (Azure or an OV cert) does **not** clear the SmartScreen
+> "unknown publisher" prompt instantly. For a new publisher the prompt persists until
+> your identity builds download reputation — typically several weeks and hundreds of
+> clean installs. This is expected; signing is what starts that reputation accruing.
 
 One-time acquisition (Azure portal):
 1. Register the `Microsoft.CodeSigning` resource provider.

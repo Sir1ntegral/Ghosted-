@@ -98,7 +98,8 @@ function Find-SignTool {
 }
 function Find-AzureDlib {
     if ($env:GHOSTED_SIGN_AZURE_DLIB -and (Test-Path $env:GHOSTED_SIGN_AZURE_DLIB)) { return $env:GHOSTED_SIGN_AZURE_DLIB }
-    $roots = @("$env:ProgramFiles\Microsoft Artifact Signing Client Tools",
+    $roots = @("${env:ProgramFiles(x86)}\Microsoft\ArtifactSigningClientTools",
+               "$env:ProgramFiles\Microsoft\ArtifactSigningClientTools",
                "${env:ProgramFiles(x86)}\Microsoft Artifact Signing Client Tools",
                "$env:LOCALAPPDATA\Microsoft\MicrosoftTrustedSigningClientTools",
                "$env:USERPROFILE\.dotnet\tools")
