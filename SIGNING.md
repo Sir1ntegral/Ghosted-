@@ -1,8 +1,20 @@
 # Code signing
 
-Ghosted's build (`build.ps1`) signs the exe with Authenticode when a certificate is
-configured. An unsigned binary triggers SmartScreen / App Control warnings, which for a
-security tool reads as untrustworthy — so signed builds matter for reputation.
+Ghosted signs with Authenticode when a certificate is configured. An unsigned binary
+triggers SmartScreen / App Control warnings, which for a security tool reads as
+untrustworthy — so signed builds matter for reputation.
+
+## Build flow (both the app exe and the installer are signed)
+
+```powershell
+.\build.ps1            # builds dist\Ghosted and signs Ghosted.exe
+.\build-installer.ps1  # compiles installer_out\Ghosted-Setup.exe and signs IT too
+```
+
+Both scripts share the signing logic in `sign.ps1` (dot-sourced), so the same certificate
+config signs the app exe *and* the downloadable installer. If no certificate is
+configured, both simply skip signing (unsigned output). CI (`.github/workflows/release.yml`)
+signs both via the Azure Trusted Signing action.
 
 ## Configure a certificate
 
