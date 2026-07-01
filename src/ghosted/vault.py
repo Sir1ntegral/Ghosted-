@@ -23,6 +23,32 @@ import os
 from typing import Any
 
 _SENTINEL = "ghosted-vault-ok-v1"
+_MIN_PASSWORD_LEN = 12
+# A few obviously-guessable passphrases to reject outright (case-insensitive).
+_TRIVIAL = {"password", "passphrase", "1234567890", "qwertyuiop", "changeme"}
+
+
+def password_problems(passphrase: str) -> list[str]:
+    """Every unmet master-password requirement, as human-readable text. Empty list
+    means the passphrase is acceptable. The master password seals the whole vault
+    (mail + mesh), so it must be strong; this is the single source of the policy."""
+    p = passphrase or ""
+    problems: list[str] = []
+    if len(p) < _MIN_PASSWORD_LEN:
+        problems.append(
+            f"be at least {_MIN_PASSWORD_LEN} characters long (yours has {len(p)})"
+        )
+    if p and p == p[0] * len(p):
+        problems.append("use more than a single repeated character")
+    if len(set(p)) < 4 and p:
+        problems.append("use at least 4 different characters")
+    if p.lower() in _TRIVIAL or p.lower().strip("0123456789") in _TRIVIAL:
+        problems.append("not be a common/guessable password")
+    return problems
+
+
+def password_ok(passphrase: str) -> bool:
+    return not password_problems(passphrase)
 
 
 def _vault_dir() -> str:
@@ -67,10 +93,9 @@ def is_initialized() -> bool:
 
 def initialize(passphrase: str) -> None:
     """Set the master password (once). Stores only an encrypted verifier."""
-    if not passphrase or len(passphrase) < 12:
-        raise ValueError(
-            "passphrase too short (min 12 chars — it seals the whole mesh + mail vault)"
-        )
+    problems = password_problems(passphrase)
+    if problems:
+        raise ValueError("password must " + "; ".join(problems))
     with open(_sentinel_path(), "w", encoding="ascii") as fh:
         fh.write(_seal(_SENTINEL, passphrase))
 
@@ -90,8 +115,9 @@ def change_password(old: str, new: str) -> bool:
     """Rotate the master password: verify old, re-seal the verifier AND the mesh."""
     if not login(old):
         return False
-    if not new or len(new) < 12:
-        raise ValueError("new passphrase too short (min 12 chars)")
+    problems = password_problems(new)
+    if problems:
+        raise ValueError("new password must " + "; ".join(problems))
     mesh = unseal_mesh(old) if has_mesh() else None
     state = read_mesh_state(old) if has_mesh_state() else None
     initialize(new)

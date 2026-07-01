@@ -465,6 +465,9 @@ def _toolbar(ctx) -> str:
     authed = ctx.get("authed")
     email_btn = ('<button onclick="location.href=\'/mail\'" '
                  'title="Your email — read, send &amp; receive (IMAP)">✉ Email</button>')
+    wg_btn = ('<button onclick="location.href=\'/wireguard\'" '
+              'title="Your WireGuard mesh — enroll devices &amp; connect tunnels">🔒 WireGuard</button>'
+              if authed else "")
     if authed:
         notes = ctx.get("notes", 0)
         badge = f" {notes}" if notes else ""
@@ -484,7 +487,7 @@ def _toolbar(ctx) -> str:
         '<button onclick="ghostedPanel(\'fav\')">★ Favorites</button>'
         '<button onclick="ghostedSpeak()" title="Lola reads the results aloud">🔊 Lola</button>'
         '<button onclick="location.href=\'/health\'" title="Device health monitor">🩺 Health</button>'
-        + email_btn + bell + acct +
+        + email_btn + wg_btn + bell + acct +
         '<button onclick="location.href=\'/help\'" title="Everything the app does">❔ Help</button>'
         '</div>'
     )
@@ -708,8 +711,11 @@ def _login_page(msg: str = "") -> str:
 <div class="tag">create your account — opens your private vault, mail & mesh</div>
 <form action="/setup" method="post" autocomplete="off" class="acct" style="text-align:center">
   <input type="text" name="display_name" placeholder="your display name (shown when signed in)" autofocus>
-  <input type="password" name="pw" placeholder="create a master password (min 12 characters)">
+  <input type="password" name="pw" placeholder="create a master password">
   <input type="password" name="pw2" placeholder="confirm master password">
+  <div class="muted" style="text-align:left;margin:2px 0 6px">Password must be at least 12
+   characters, use 4+ different characters, and not be a common password — it seals your
+   whole vault (mail + mesh), so make it strong.</div>
   <input type="text" name="email" placeholder="your email(s), comma-separated — blank uses @{PUBLIC_DOMAIN}">
   <div class="btns"><button type="submit">Create account</button></div>
   <div class="muted">Guests can search, check health & use every capability without an
@@ -985,35 +991,9 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
    <input type="password" name="pw" placeholder="your master password (to view configs)">
    <div class="btns"><button type="submit">View / export mesh configs</button></div></form>
 
-  <div class="muted" style="margin-top:10px"><b>Enroll one device</b> (added to your mesh,
-   keys preserved — enrollment is remembered):</div>
-  <form action="/account" method="post"><input type="hidden" name="action" value="wg_enroll_device">
-   <input type="text" name="name" placeholder="device name (e.g. phone)">
-   <input type="text" name="endpoint" placeholder="endpoint host:port (optional — blank if NAT)">
-   <input type="text" name="hub" placeholder="hub device name (optional)">
-   <input type="password" name="pw" placeholder="your master password">
-   <div class="btns"><button type="submit">Enroll device</button></div></form>
-
-  <div class="muted"><b>Connect / disconnect</b> a tunnel (real WireGuard for Windows —
-   needs it installed + Administrator; otherwise the .conf is exported to import):</div>
-  <form action="/account" method="post" style="display:inline-block;margin-right:8px">
-   <input type="hidden" name="action" value="wg_connect">
-   <input type="text" name="name" placeholder="device/tunnel name">
-   <input type="password" name="pw" placeholder="master password">
-   <div class="btns"><button type="submit">🔌 Connect tunnel</button></div></form>
-  <form action="/account" method="post" style="display:inline-block">
-   <input type="hidden" name="action" value="wg_disconnect">
-   <input type="text" name="name" placeholder="tunnel name">
-   <div class="btns"><button type="submit">⏹ Disconnect</button></div></form>
-
-  <div class="muted" style="margin-top:10px"><b>Join an existing mesh</b> — your keys are
-   generated on this device (private key never leaves it); hand the hub your public key:</div>
-  <form action="/account" method="post"><input type="hidden" name="action" value="wg_join">
-   <input type="text" name="name" placeholder="this device's name">
-   <input type="text" name="hub_pubkey" placeholder="hub public key">
-   <input type="text" name="hub_endpoint" placeholder="hub endpoint host:port">
-   <input type="password" name="pw" placeholder="your master password">
-   <div class="btns"><button type="submit">Join mesh</button></div></form>
+  <div class="muted" style="margin-top:8px">Enroll one device, connect/disconnect real
+   tunnels, or join another mesh from the dedicated tab:</div>
+  <div class="btns"><button onclick="location.href='/wireguard'">🔒 Open WireGuard</button></div>
 
   <h3>Connection &amp; hotspot</h3>
   <div class="muted">Get online by any available door (wifi / ethernet, else dial-up), and
@@ -1072,6 +1052,77 @@ def _codes_page(codes: list, ctx: dict | None = None) -> str:
 <div class="tag">store these safely — each works once if you lose a factor</div>
 <div class="acct" style="text-align:center">{rows}
 <div class="tag"><a href="/account" style="color:#9aa9ff;text-decoration:none">← back to account</a></div></div>
+</body></html>"""
+
+
+def _wireguard_page(ctx: dict | None = None, msg: str = "") -> str:
+    """The WireGuard control center (its own tab): tunnel status + enroll / connect /
+    join controls. Every form posts to /account's authed, Gojo-guarded handlers."""
+    ctx = ctx or {"authed": True, "accent": "#9aa9ff", "notes": 0}
+    banner = ""
+    if msg:
+        err = msg.startswith("!")
+        banner = (f'<div class="tag" style="color:{"#ff8aa0" if err else "#7bd88f"}">'
+                  f'{html.escape(msg.lstrip("! "))}</div>')
+    try:
+        from ghosted import wg_tunnel
+
+        st = wg_tunnel.status()
+        wg_installed = ("✓ WireGuard for Windows installed" if st.get("installed")
+                        else "WireGuard for Windows not installed — tunnels export as .conf to import")
+        tuns = ", ".join(st.get("active_tunnels") or []) or "none active"
+    except Exception:
+        wg_installed, tuns = "status unavailable", "unknown"
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — WireGuard</title>
+<style>{_CSS}</style>{_accent_style(ctx)}</head><body>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:30px;margin-top:56px">🔒 <b>WireGuard</b></div>
+<div class="tag">enroll your devices into a sovereign mesh and bring tunnels up — all sealed
+ in your vault, guarded by Gojo</div>{banner}
+<div class="acct" style="text-align:left">
+  <div class="row muted">{html.escape(wg_installed)}</div>
+  <div class="row muted">active tunnels: {html.escape(tuns)}</div>
+
+  <h3>Enroll a device</h3>
+  <div class="muted">Added to your mesh; existing devices keep their keys. Enrollment is
+   remembered.</div>
+  <form action="/account" method="post"><input type="hidden" name="action" value="wg_enroll_device">
+   <input type="text" name="name" placeholder="device name (e.g. phone)">
+   <input type="text" name="endpoint" placeholder="endpoint host:port (optional — blank if NAT)">
+   <input type="text" name="hub" placeholder="hub device name (optional)">
+   <input type="password" name="pw" placeholder="your master password">
+   <div class="btns"><button type="submit">Enroll device</button></div></form>
+
+  <h3>Connect / disconnect a tunnel</h3>
+  <div class="muted">Real WireGuard for Windows (needs it installed + Administrator);
+   otherwise the .conf is exported for you to import.</div>
+  <form action="/account" method="post" style="display:inline-block;margin-right:8px">
+   <input type="hidden" name="action" value="wg_connect">
+   <input type="text" name="name" placeholder="device/tunnel name">
+   <input type="password" name="pw" placeholder="master password">
+   <div class="btns"><button type="submit">🔌 Connect</button></div></form>
+  <form action="/account" method="post" style="display:inline-block">
+   <input type="hidden" name="action" value="wg_disconnect">
+   <input type="text" name="name" placeholder="tunnel name">
+   <div class="btns"><button type="submit">⏹ Disconnect</button></div></form>
+
+  <h3>Join an existing mesh</h3>
+  <div class="muted">Your keys are generated on this device (private key never leaves it);
+   hand the hub your public key so they can add you.</div>
+  <form action="/account" method="post"><input type="hidden" name="action" value="wg_join">
+   <input type="text" name="name" placeholder="this device's name">
+   <input type="text" name="hub_pubkey" placeholder="hub public key">
+   <input type="text" name="hub_endpoint" placeholder="hub endpoint host:port">
+   <input type="password" name="pw" placeholder="your master password">
+   <div class="btns"><button type="submit">Join mesh</button></div></form>
+
+  <h3>View / export configs</h3>
+  <form action="/account" method="post"><input type="hidden" name="action" value="view_mesh">
+   <input type="password" name="pw" placeholder="your master password">
+   <div class="btns"><button type="submit">View / export mesh configs</button></div></form>
+  <div class="tag" style="margin-top:12px"><a href="/account" style="color:#9aa9ff;text-decoration:none">← account</a>
+   &nbsp;·&nbsp; <a href="/" style="color:#9aa9ff;text-decoration:none">🏠 Home</a></div>
+</div>
 </body></html>"""
 
 
@@ -1301,6 +1352,14 @@ class _Handler(BaseHTTPRequestHandler):
             # Not initialized → onboarding; authed + initialized → dashboard; else unlock.
             if ctx["authed"] and vault.is_initialized():
                 self._send(_account_page(ctx))
+            else:
+                self._send(_login_page())
+            return
+        if path == "/wireguard":
+            from ghosted import vault
+
+            if ctx["authed"] and vault.is_initialized():
+                self._send(_wireguard_page(ctx))
             else:
                 self._send(_login_page())
             return
@@ -1612,8 +1671,15 @@ class _Handler(BaseHTTPRequestHandler):
         name = (form.get("display_name") or [""])[0].strip()
         emails = [e.strip() for e in (form.get("email") or [""])[0].replace(";", ",").split(",") if e.strip()]
         if not vault.is_initialized():
-            if not pw or pw != pw2:
-                self._send(_login_page("passwords empty or did not match"))
+            if not pw or not pw2:
+                self._send(_login_page("enter your password twice to create your account"))
+                return
+            if pw != pw2:
+                self._send(_login_page("the two passwords did not match — try again"))
+                return
+            problems = vault.password_problems(pw)
+            if problems:  # doesn't reach the requirements → tell them exactly what's missing
+                self._send(_login_page("password must " + "; ".join(problems)))
                 return
             try:
                 vault.initialize(pw)
@@ -1776,14 +1842,18 @@ class _Handler(BaseHTTPRequestHandler):
                 if not conf:
                     raise ValueError("no such enrolled device / wrong master password")
                 r = wg_tunnel.connect(g("name"), conf)
-                msg = (f"tunnel '{g('name')}' up" if r.get("ok")
-                       else f"! {r.get('error', 'connect failed')}"
-                            + (f" — {r['hint']}" if r.get("hint") else ""))
+                wmsg = (f"tunnel '{g('name')}' up" if r.get("ok")
+                        else f"! {r.get('error', 'connect failed')}"
+                             + (f" — {r['hint']}" if r.get("hint") else ""))
+                self._send(_wireguard_page(_ctx(self), wmsg))
+                return
             elif action == "wg_disconnect":
                 from ghosted import wg_tunnel
 
                 r = wg_tunnel.disconnect(g("name"))
-                msg = f"tunnel '{g('name')}' down" if r.get("ok") else f"! {r.get('error', r.get('detail', 'failed'))}"
+                wmsg = f"tunnel '{g('name')}' down" if r.get("ok") else f"! {r.get('error', r.get('detail', 'failed'))}"
+                self._send(_wireguard_page(_ctx(self), wmsg))
+                return
             elif action == "connect_any":
                 from ghosted import connectivity
 
