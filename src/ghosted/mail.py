@@ -272,6 +272,76 @@ def remove_account(addr: str) -> bool:
     return False
 
 
+def default_account() -> str:
+    """The primary enrolled external email address (first saved), or '' if none."""
+    return next(iter(accounts()), "")
+
+
+def send_via_account(
+    to: str, subject: str, body: str, master_pw: str, from_addr: str = ""
+) -> dict:
+    """Send an external email using an ENROLLED account's SMTP settings + saved password,
+    so the user never re-types servers/credentials. Resolves SMTP host/port from the
+    account's provider even if it was enrolled for IMAP/POP receiving."""
+    addr = (from_addr or default_account()).strip().lower()
+    if not addr:
+        raise ValueError("no enrolled email account — add one on your account page first")
+    cfg = accounts().get(addr)
+    if not cfg:
+        raise ValueError(f"{addr} is not enrolled — add it on your account page first")
+    pc = provider_config(addr)
+    if cfg.get("protocol") == "smtp" and cfg.get("host"):
+        host, port = cfg["host"], int(cfg.get("port") or pc["smtp"]["port"])
+    else:
+        host, port = pc["smtp"]["host"], pc["smtp"]["port"]
+    if not host:
+        raise ValueError(f"no SMTP server known for {addr} — set one on your account")
+    pwd = account_password(addr, master_pw)
+    if not pwd:
+        raise ValueError(
+            "no saved email password for this account — save one (an app password for "
+            "Gmail/Yahoo/Outlook) on your account page to send"
+        )
+    from ghosted import bridge
+
+    return bridge.send_external(
+        to, subject, body,
+        from_addr=addr,
+        smtp_host=host, smtp_port=port,
+        username=cfg.get("username") or addr, password=pwd,
+    )
+
+
+def pull_via_account(master_pw: str, addr: str = "", limit: int = 50) -> dict:
+    """Receive external mail using an ENROLLED account's IMAP/POP settings + saved
+    password, so a one-click 'fetch' works with no re-typing."""
+    addr = (addr or default_account()).strip().lower()
+    if not addr:
+        raise ValueError("no enrolled email account — add one on your account page first")
+    cfg = accounts().get(addr)
+    if not cfg:
+        raise ValueError(f"{addr} is not enrolled — add it on your account page first")
+    pwd = account_password(addr, master_pw)
+    if not pwd:
+        raise ValueError(
+            "no saved email password for this account — save one (an app password for "
+            "Gmail/Yahoo/Outlook) on your account page to receive"
+        )
+    user = cfg.get("username") or addr
+    pc = provider_config(addr)
+    from ghosted import imap_pull
+
+    if cfg.get("protocol") == "pop":
+        host = cfg.get("host") or pc["pop"]["host"]
+        port = int(cfg.get("port") or pc["pop"]["port"])
+        return imap_pull.pull_pop(host, user, pwd, master_pw, port=port, limit=limit)
+    if cfg.get("protocol") == "imap" and cfg.get("host"):
+        host, port = cfg["host"], int(cfg.get("port") or pc["imap"]["port"])
+    else:  # enrolled for smtp-only, or no host — resolve IMAP from the provider
+        host, port = pc["imap"]["host"], pc["imap"]["port"]
+    return imap_pull.pull_imap(host, user, pwd, master_pw, port=port, limit=limit)
+
+
 def _mailbox_dir() -> str:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
     d = os.path.join(base, "Ghosted", "mail")
@@ -321,22 +391,91 @@ def send(to: str, subject: str, body: str, passphrase: str, sender: str = "me") 
     return path
 
 
-def seal_inbound(raw_rfc822: str, passphrase: str) -> str:
-    """Layer-B hook: black-box an externally-received (plaintext) email AT REST the
-    moment it lands, so it never sits on disk readable."""
-    msg = {
-        "to": "me",
-        "from": "external",
-        "subject": "(external)",
-        "body": raw_rfc822,
-        "t": int(time.time()),
+def parse_rfc822(raw: str) -> dict:
+    """Parse a raw RFC822 message into clean, readable fields: from / to / subject /
+    date + a plain-text body. Robust to MIME multipart and charsets; falls back to a
+    tag-stripped HTML body, then to the raw text. Never raises."""
+    import re as _re
+    from email import policy
+    from email.parser import Parser
+    from email.utils import parsedate_to_datetime
+
+    try:
+        m = Parser(policy=policy.default).parsestr(raw)
+    except Exception:
+        return {"from": "external", "to": "me", "subject": "(external)",
+                "body": raw, "date": "", "t": int(time.time())}
+
+    def hdr(name: str) -> str:
+        try:
+            return str(m.get(name, "") or "").strip()
+        except Exception:
+            return ""
+
+    body = ""
+    try:
+        part = m.get_body(preferencelist=("plain",))
+        if part is not None:
+            body = part.get_content()
+    except Exception:
+        body = ""
+    if not body:
+        try:
+            part = m.get_body(preferencelist=("html",))
+            if part is not None:
+                stripped = _re.sub(r"(?is)<(script|style).*?</\1>", "", part.get_content())
+                stripped = _re.sub(r"(?s)<[^>]+>", " ", stripped)
+                body = _re.sub(r"[ \t]*\n[ \t]*", "\n", stripped)
+                body = _re.sub(r"\n{3,}", "\n\n", body).strip()
+        except Exception:
+            body = ""
+    if not body:
+        try:
+            body = m.get_content() if not m.is_multipart() else raw
+        except Exception:
+            body = raw
+
+    t = int(time.time())
+    try:
+        dt = parsedate_to_datetime(hdr("Date"))
+        if dt is not None:
+            t = int(dt.timestamp())
+    except Exception:
+        pass
+    return {
+        "from": hdr("From") or "external",
+        "to": hdr("To") or "me",
+        "subject": hdr("Subject") or "(no subject)",
+        "body": body or "",
+        "date": hdr("Date"),
+        "t": t,
     }
+
+
+def seal_inbound(raw_rfc822: str, passphrase: str) -> str:
+    """Parse an externally-received email into readable fields, then black-box it AT
+    REST the moment it lands, so it never sits on disk readable but IS readable in the
+    mailbox with the key (real from/subject/body, not a raw MIME dump)."""
+    msg = parse_rfc822(raw_rfc822)
     path = os.path.join(
         _mailbox_dir(), f"{int(time.time() * 1000)}-{secrets.token_hex(4)}.box"
     )
     with open(path, "w", encoding="ascii") as fh:
         fh.write(_seal(msg, passphrase))
     return path
+
+
+def delete(path: str) -> bool:
+    """Remove one mailbox black box (management). Path-guarded to the mailbox dir."""
+    try:
+        root = os.path.realpath(_mailbox_dir())
+        p = os.path.realpath(path)
+        if os.path.commonpath([root, p]) != root or not p.endswith(".box"):
+            return False
+        os.remove(p)
+        return True
+    except Exception:
+        return False
 
 
 def inbox() -> list[str]:

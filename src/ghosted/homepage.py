@@ -1332,11 +1332,15 @@ def _mail_unlock_page(ctx: dict, msg: str = "") -> str:
 </body></html>"""
 
 
-def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
-    """The webmail client: inbox, read, compose/send, and IMAP/POP receive."""
+def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "", prefill: dict | None = None) -> str:
+    """The webmail client: inbox, read, reply, delete, compose/send, IMAP/POP receive."""
     from ghosted import mail
 
     boxes = mail.inbox()
+    pf = prefill or {}
+    pto = html.escape(str(pf.get("to", "")), quote=True)
+    psub = html.escape(str(pf.get("subject", "")), quote=True)
+    pbody = html.escape(str(pf.get("body", "")))
     note = f'<div class="tag" style="color:#7bd88f">{html.escape(msg)}</div>' if msg else ""
     reading = ""
     if 0 <= read_idx < len(boxes):
@@ -1348,6 +1352,11 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
                 f'<div class="row">to: {html.escape(str(m.get("to", "")))}</div>'
                 f'<div class="row">subject: <b>{html.escape(str(m.get("subject", "")))}</b></div>'
                 f'<div class="row" style="white-space:pre-wrap">{html.escape(str(m.get("body", "")))}</div>'
+                '<div class="btns" style="margin-top:8px">'
+                f'<button onclick="location.href=\'/mail?reply={read_idx}\'">↩ Reply</button>'
+                f'<form action="/mail" method="post" style="display:inline;margin-left:8px">'
+                f'<input type="hidden" name="action" value="delete"><input type="hidden" name="idx" value="{read_idx}">'
+                '<button type="submit">🗑 Delete</button></form></div>'
                 '<div class="tag"><a href="/mail" style="color:#9aa9ff;text-decoration:none">← inbox</a></div></div>'
             )
         except Exception:
@@ -1368,8 +1377,12 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
                 rows.append('<div class="row muted">🔒 sealed (different key)</div>')
                 continue
         subj, frm = html.escape(prev[0]), html.escape(prev[1])
-        rows.append(f'<div class="row"><a href="/mail?id={i}" style="color:#9aa9ff;text-decoration:none">'
-                    f'<b>{subj}</b> <span class="muted">— {frm}</span></a></div>')
+        rows.append(
+            f'<div class="row"><a href="/mail?id={i}" style="color:#9aa9ff;text-decoration:none">'
+            f'<b>{subj}</b> <span class="muted">— {frm}</span></a>'
+            f'<form action="/mail" method="post" style="display:inline;float:right">'
+            f'<input type="hidden" name="action" value="delete"><input type="hidden" name="idx" value="{i}">'
+            f'<button type="submit" title="delete" style="padding:2px 8px">🗑</button></form></div>')
     inbox_rows = "".join(rows) or '<div class="row muted">inbox empty</div>'
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Mail</title>
 <style>{_CSS}</style>{_accent_style(ctx)}</head><body>
@@ -1380,14 +1393,16 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
 <div class="acct">
   <h3>Compose</h3>
   <form action="/mail" method="post"><input type="hidden" name="action" value="send">
-   <input type="text" name="to" placeholder="to (peer @sovereign.dmn or external address)">
-   <input type="text" name="subject" placeholder="subject">
-   <textarea name="body" placeholder="message" style="width:100%;min-height:120px;margin:6px 0;padding:11px 14px;border-radius:10px;border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#fff"></textarea>
+   <input type="text" name="to" value="{pto}" placeholder="to (peer @sovereign.dmn or external address)">
+   <input type="text" name="subject" value="{psub}" placeholder="subject">
+   <textarea name="body" placeholder="message" style="width:100%;min-height:120px;margin:6px 0;padding:11px 14px;border-radius:10px;border:1px solid #2a2f55;background:rgba(22,26,48,.85);color:#fff">{pbody}</textarea>
    <div class="row"><label><input type="radio" name="mode" value="sovereign" checked> sovereign / mesh</label>
-     &nbsp; <label><input type="radio" name="mode" value="external"> external SMTP</label></div>
-   <div class="muted">External SMTP (optional): from / host / port / username / password (used once, never stored)</div>
-   <input type="text" name="from_addr" placeholder="from address (external)">
-   <input type="text" name="smtp_host" placeholder="smtp host (e.g. smtp.gmail.com)">
+     &nbsp; <label><input type="radio" name="mode" value="external"> external email</label></div>
+   <div class="muted">Pick <b>external email</b> to send through your enrolled account — leave the fields below blank
+    and Ghosted uses its saved SMTP&nbsp;+&nbsp;password automatically. Gmail / Yahoo / Outlook require an
+    <b>app password</b> (not your login password). Fill the fields only to relay through another server once (never stored).</div>
+   <input type="text" name="from_addr" placeholder="from (blank = your enrolled account)">
+   <input type="text" name="smtp_host" placeholder="smtp host (blank = auto from your account)">
    <input type="text" name="smtp_port" placeholder="smtp port (587)">
    <input type="text" name="smtp_user" placeholder="smtp username">
    <input type="password" name="smtp_pass" placeholder="smtp password (one-time)">
@@ -1396,14 +1411,19 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
   <h3>Inbox</h3>{inbox_rows}
 
   <h3>Receive external mail (IMAP / POP)</h3>
-  <form action="/mail" method="post"><input type="hidden" name="action" value="pull">
+  <form action="/mail" method="post" style="margin-bottom:10px"><input type="hidden" name="action" value="pull">
+   <div class="btns"><button type="submit">📥 Fetch my enrolled inbox</button></div>
+   <div class="muted">One click — uses your enrolled account's server + saved password automatically.</div></form>
+  <form action="/mail" method="post">
+   <input type="hidden" name="action" value="pull">
+   <div class="muted">…or fetch a different account just this once:</div>
    <input type="text" name="host" placeholder="imap/pop host (e.g. imap.gmail.com)">
    <input type="text" name="username" placeholder="username / email">
    <input type="password" name="password" placeholder="password (blank = use your saved email password)">
    <input type="text" name="port" placeholder="port (993 imap / 995 pop)">
    <div class="row"><label><input type="radio" name="proto" value="imap" checked> IMAP</label>
      <label><input type="radio" name="proto" value="pop"> POP</label></div>
-   <div class="muted">Leave the password blank to use the encrypted email password saved on your account.</div>
+   <div class="muted">Gmail / Yahoo / Outlook require an <b>app password</b> (not your normal login password).</div>
    <div class="btns"><button type="submit">Fetch into mailbox</button></div></form>
 
   <div class="tag" style="margin-top:14px"><a href="/" style="color:#9aa9ff;text-decoration:none">🏠 Home</a>
@@ -1553,7 +1573,27 @@ class _Handler(BaseHTTPRequestHandler):
                 rid = int((q.get("id") or ["-1"])[0])
             except ValueError:
                 rid = -1
-            self._send(_mail_page(ctx, pw, rid))
+            prefill = None
+            if q.get("reply"):
+                try:
+                    from email.utils import parseaddr
+
+                    from ghosted import mail as _m
+
+                    ridx = int((q.get("reply") or ["-1"])[0])
+                    boxes = _m.inbox()
+                    if 0 <= ridx < len(boxes):
+                        om = _m.read(boxes[ridx], pw)
+                        subj = str(om.get("subject", ""))
+                        addr = parseaddr(str(om.get("from", "")))[1] or str(om.get("from", ""))
+                        prefill = {
+                            "to": addr,
+                            "subject": subj if subj.lower().startswith("re:") else f"Re: {subj}",
+                            "body": "\n\n----- original message -----\n" + str(om.get("body", ""))[:4000],
+                        }
+                except Exception:
+                    prefill = None
+            self._send(_mail_page(ctx, pw, rid, "", prefill))
             return
         self._send("<h1>404</h1>", 404)
 
@@ -1717,18 +1757,21 @@ class _Handler(BaseHTTPRequestHandler):
                 to, subject, mbody = g("to").strip(), g("subject"), g("body")
                 if "@" not in to:
                     raise ValueError("a recipient email address is required")
-                if g("mode") == "external" and g("smtp_host"):
-                    from ghosted import bridge
+                if g("mode") == "external":
+                    if g("smtp_host"):  # manual one-off SMTP override
+                        from ghosted import bridge
 
-                    bridge.send_external(
-                        to, subject, mbody,
-                        from_addr=g("from_addr") or mail.address("me"),
-                        smtp_host=g("smtp_host"),
-                        smtp_port=_port(g("smtp_port"), 587),
-                        username=g("smtp_user") or None,
-                        password=g("smtp_pass") or None,
-                    )
-                    msg = f"sent to {to} via external email"
+                        bridge.send_external(
+                            to, subject, mbody,
+                            from_addr=g("from_addr") or mail.default_account() or mail.address("me"),
+                            smtp_host=g("smtp_host"),
+                            smtp_port=_port(g("smtp_port"), 587),
+                            username=g("smtp_user") or None,
+                            password=g("smtp_pass") or None,
+                        )
+                    else:  # auto: use the enrolled account's SMTP + saved password
+                        mail.send_via_account(to, subject, mbody, pw, from_addr=g("from_addr"))
+                    msg = f"sent to {to} via your email account"
                 else:
                     box = mail.send(to, subject, mbody, pw)
                     # best-effort peer push over the mesh; mail.send always seals a
@@ -1743,28 +1786,43 @@ class _Handler(BaseHTTPRequestHandler):
                     msg = (f"delivered to {to} over the mesh" if pushed
                            else f"sealed to your sovereign mailbox for {to}")
             elif action == "pull":
-                from ghosted import imap_pull
-
-                host, user, pwd = g("host"), g("username"), g("password")
-                if not host:
-                    raise ValueError("the IMAP/POP server host is required")
-                if not user:
-                    raise ValueError("your email username is required")
-                if not pwd:  # fall back to a saved (encrypted) email password
-                    for addr, c in mail.accounts().items():
-                        if user.lower() in (addr, c.get("username", "").lower()) or c.get("host") == host:
-                            saved = mail.account_password(addr, pw)
-                            if saved:
-                                pwd = saved
-                                break
-                if not pwd:
-                    raise ValueError("no password — enter it, or save one on your account first")
-                if g("proto") == "pop":
-                    r = imap_pull.pull_pop(host, user, pwd, pw, port=_port(g("port"), 995))
+                host, user, pwd = g("host").strip(), g("username").strip(), g("password")
+                if not host and not user:
+                    # one-click: use the enrolled account (host/user/port/password auto)
+                    r = mail.pull_via_account(pw)
                 else:
-                    r = imap_pull.pull_imap(host, user, pwd, pw, port=_port(g("port"), 993))
+                    from ghosted import imap_pull
+
+                    if not host:
+                        raise ValueError("the IMAP/POP server host is required")
+                    if not user:
+                        raise ValueError("your email username is required")
+                    if not pwd:  # fall back to a saved (encrypted) email password
+                        for addr, c in mail.accounts().items():
+                            if user.lower() in (addr, c.get("username", "").lower()) or c.get("host") == host:
+                                saved = mail.account_password(addr, pw)
+                                if saved:
+                                    pwd = saved
+                                    break
+                    if not pwd:
+                        raise ValueError("no password — enter it, or save one on your account first")
+                    if g("proto") == "pop":
+                        r = imap_pull.pull_pop(host, user, pwd, pw, port=_port(g("port"), 995))
+                    else:
+                        r = imap_pull.pull_imap(host, user, pwd, pw, port=_port(g("port"), 993))
                 _MAIL_PREVIEW.clear()  # new mail arrived → refresh the inbox preview cache
                 msg = f"imported {r.get('sealed', 0)} message(s) into your mailbox"
+            elif action == "delete":
+                boxes = mail.inbox()
+                try:
+                    di = int(g("idx", "-1"))
+                except ValueError:
+                    di = -1
+                if 0 <= di < len(boxes) and mail.delete(boxes[di]):
+                    _MAIL_PREVIEW.pop(boxes[di], None)
+                    msg = "message deleted"
+                else:
+                    msg = "could not delete that message"
         except Exception as e:  # surface the error, never 500
             msg = f"could not complete: {e}"
         self._send(_mail_page(ctx, pw, -1, msg))
