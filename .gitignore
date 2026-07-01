@@ -46,3 +46,4 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+signing/azure-metadata.json

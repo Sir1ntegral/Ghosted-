@@ -6,23 +6,56 @@ security tool reads as untrustworthy — so signed builds matter for reputation.
 
 ## Configure a certificate
 
-Set **one** of the following before building (or in your CI secrets):
+Set **one** of the following before building (checked in this order). `build.ps1`
+locates `signtool.exe` (PATH or the Windows SDK) and signs with SHA-256 + a timestamp.
 
 ```powershell
-# a .pfx file
+# 1) Azure Artifact Signing (cloud EV — instant SmartScreen trust, no hardware token)
+$env:GHOSTED_SIGN_AZURE_JSON = 'C:\path\to\metadata.json'
+# optional: $env:GHOSTED_SIGN_AZURE_DLIB = '...\Azure.CodeSigning.Dlib.dll' (else auto-located)
+
+# 2) a .pfx file
 $env:GHOSTED_SIGN_PFX  = 'C:\path\to\cert.pfx'
 $env:GHOSTED_SIGN_PASS = 'pfx-password'
 
-# -- or -- a certificate already in the local store, by thumbprint
+# 3) a certificate already in the local store, by thumbprint
 $env:GHOSTED_SIGN_THUMBPRINT = '<thumbprint>'
 
 # optional: override the RFC3161 timestamp URL
-$env:GHOSTED_SIGN_TS = 'http://timestamp.digicert.com'
+$env:GHOSTED_SIGN_TS = 'http://timestamp.digicert.com'   # Azure default: timestamp.acs.microsoft.com
 ```
 
-With neither set, the build prints a skip notice and produces an **unsigned** exe (same
-as before). `build.ps1` locates `signtool.exe` (PATH or the Windows SDK) and signs with
-SHA-256 + a timestamp.
+With none set, the build prints a skip notice and produces an **unsigned** exe.
+
+## Azure Artifact Signing (recommended — removes the SmartScreen warning)
+
+Azure Artifact Signing (formerly "Trusted Signing") is Microsoft's cloud EV code
+signing — ~$10/mo Basic, **no hardware token**, and **instant SmartScreen reputation**.
+
+One-time acquisition (Azure portal):
+1. Register the `Microsoft.CodeSigning` resource provider.
+2. Create a **Trusted Signing Account** (Basic SKU) in a supported region.
+3. Assign yourself **Trusted Signing Identity Verifier** + **Certificate Profile Signer** roles.
+4. **Identity validations → New Identity** → Individual (USA/Canada) or Organization →
+   complete Verified ID / business validation until status **Completed**.
+5. **Certificate profiles → Create → Public Trust** → select your identity validation.
+
+On the build machine:
+```powershell
+winget install -e --id Microsoft.Azure.ArtifactSigningClientTools   # signtool dlib + deps
+az login                                                            # or a service principal (Signer role)
+```
+Create `metadata.json` (region endpoint + your account/profile names):
+```json
+{
+  "Endpoint": "https://wus3.codesigning.azure.net/",
+  "CodeSigningAccountName": "ghostedsigning",
+  "CertificateProfileName": "ghosted"
+}
+```
+Then `$env:GHOSTED_SIGN_AZURE_JSON = '<path>\metadata.json'` and run `build.ps1` — it
+signs via `signtool /dlib /dmdf` against the ACS timestamp. Verify with
+`Get-AuthenticodeSignature .\dist\Ghosted\Ghosted.exe` → `Status: Valid`.
 
 ## Production (public downloads)
 

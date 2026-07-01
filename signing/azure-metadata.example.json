@@ -1,0 +1,6 @@
+{
+  "_comment": "Copy to azure-metadata.json, fill in your Trusted Signing region endpoint + account/profile, then set $env:GHOSTED_SIGN_AZURE_JSON to its path and run build.ps1. See SIGNING.md.",
+  "Endpoint": "https://wus3.codesigning.azure.net/",
+  "CodeSigningAccountName": "ghostedsigning",
+  "CertificateProfileName": "ghosted"
+}
