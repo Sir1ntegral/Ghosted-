@@ -200,6 +200,7 @@ def menu() -> None:
           home [port]       open the search website (GUI: logo + search bar + layout)
           login             unlock / set the master password (vault + mesh)
           network           build a WireGuard mesh, sealed in the vault (login first)
+          wg <sub> [name]   WireGuard: status|roster|enroll|join|connect|disconnect
           encrypt <text>    seal text with GHOSTED-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
@@ -484,6 +485,45 @@ def handle_command(
                 )
             }
         )
+    elif cmd == "wg":
+        # WireGuard: enroll devices (both directions), connect/disconnect real tunnels.
+        from ghosted import wg_enroll, wg_tunnel
+
+        sub, _, arg = rest.strip().partition(" ")
+        sub = sub.lower()
+        if sub in ("status", ""):
+            out(wg_tunnel.status())
+        elif sub == "roster":
+            if not session.get("pw"):
+                out("locked — run 'login' first")
+            else:
+                out(wg_enroll.roster(session["pw"]))
+        elif sub == "enroll":
+            if not session.get("pw"):
+                out("locked — run 'login' first")
+            else:
+                nm = arg.strip() or ask("  device name: ").strip()
+                ep = ask(f"  {nm} endpoint host:port (blank if NAT): ").strip()
+                out(wg_enroll.add_peer(nm, endpoint=ep, passphrase=session["pw"]))
+        elif sub == "join":
+            if not session.get("pw"):
+                out("locked — run 'login' first")
+            else:
+                nm = arg.strip() or ask("  this device's name: ").strip()
+                hp = ask("  hub public key: ").strip()
+                he = ask("  hub endpoint host:port: ").strip()
+                out(wg_enroll.join_mesh(nm, hp, he, session["pw"]))
+        elif sub in ("connect", "up"):
+            if not session.get("pw"):
+                out("locked — run 'login' first")
+            else:
+                nm = arg.strip() or ask("  device/tunnel name: ").strip()
+                conf = wg_enroll.device_config(nm, session["pw"])
+                out(wg_tunnel.connect(nm, conf) if conf else "no such enrolled device")
+        elif sub in ("disconnect", "down"):
+            out(wg_tunnel.disconnect(arg.strip() or ask("  tunnel name: ").strip()))
+        else:
+            out("wg <status|roster|enroll|join|connect|disconnect> [name]")
     elif cmd == "encrypt":
         import base64
 

@@ -985,6 +985,36 @@ def _account_page(ctx: dict | None = None, msg: str = "") -> str:
    <input type="password" name="pw" placeholder="your master password (to view configs)">
    <div class="btns"><button type="submit">View / export mesh configs</button></div></form>
 
+  <div class="muted" style="margin-top:10px"><b>Enroll one device</b> (added to your mesh,
+   keys preserved — enrollment is remembered):</div>
+  <form action="/account" method="post"><input type="hidden" name="action" value="wg_enroll_device">
+   <input type="text" name="name" placeholder="device name (e.g. phone)">
+   <input type="text" name="endpoint" placeholder="endpoint host:port (optional — blank if NAT)">
+   <input type="text" name="hub" placeholder="hub device name (optional)">
+   <input type="password" name="pw" placeholder="your master password">
+   <div class="btns"><button type="submit">Enroll device</button></div></form>
+
+  <div class="muted"><b>Connect / disconnect</b> a tunnel (real WireGuard for Windows —
+   needs it installed + Administrator; otherwise the .conf is exported to import):</div>
+  <form action="/account" method="post" style="display:inline-block;margin-right:8px">
+   <input type="hidden" name="action" value="wg_connect">
+   <input type="text" name="name" placeholder="device/tunnel name">
+   <input type="password" name="pw" placeholder="master password">
+   <div class="btns"><button type="submit">🔌 Connect tunnel</button></div></form>
+  <form action="/account" method="post" style="display:inline-block">
+   <input type="hidden" name="action" value="wg_disconnect">
+   <input type="text" name="name" placeholder="tunnel name">
+   <div class="btns"><button type="submit">⏹ Disconnect</button></div></form>
+
+  <div class="muted" style="margin-top:10px"><b>Join an existing mesh</b> — your keys are
+   generated on this device (private key never leaves it); hand the hub your public key:</div>
+  <form action="/account" method="post"><input type="hidden" name="action" value="wg_join">
+   <input type="text" name="name" placeholder="this device's name">
+   <input type="text" name="hub_pubkey" placeholder="hub public key">
+   <input type="text" name="hub_endpoint" placeholder="hub endpoint host:port">
+   <input type="password" name="pw" placeholder="your master password">
+   <div class="btns"><button type="submit">Join mesh</button></div></form>
+
   <h3>Connection &amp; hotspot</h3>
   <div class="muted">Get online by any available door (wifi / ethernet, else dial-up), and
    share it as a WiFi hotspot so your devices join. Hotspot needs admin + a capable adapter.</div>
@@ -1715,6 +1745,45 @@ class _Handler(BaseHTTPRequestHandler):
                     raise ValueError("no WireGuard mesh configured yet — build one first")
                 self._send(_mesh_page(vault.unseal_mesh(g("pw")), _ctx(self)))
                 return
+            elif action == "wg_enroll_device":
+                from ghosted import wg_enroll
+
+                if not g("name"):
+                    raise ValueError("a device name is required")
+                r = wg_enroll.add_peer(g("name"), endpoint=g("endpoint"),
+                                       passphrase=g("pw"), hub=g("hub"))
+                if not r.get("ok"):
+                    raise ValueError(r.get("error", "enrollment failed"))
+                self._send(_mesh_page({r["name"]: r["config"]}, _ctx(self),
+                                      f"enrolled '{r['name']}' — {r['count']} device(s) in your mesh"))
+                return
+            elif action == "wg_join":
+                from ghosted import wg_enroll
+
+                for req in ("name", "hub_pubkey", "hub_endpoint"):
+                    if not g(req):
+                        raise ValueError("name, hub public key and hub endpoint are all required")
+                r = wg_enroll.join_mesh(g("name"), g("hub_pubkey"), g("hub_endpoint"), g("pw"))
+                if not r.get("ok"):
+                    raise ValueError(r.get("error", "join failed"))
+                self._send(_mesh_page({r["name"]: r["config"]}, _ctx(self),
+                                      f"joined — hand the hub your public key: {r['public_key']}"))
+                return
+            elif action == "wg_connect":
+                from ghosted import wg_enroll, wg_tunnel
+
+                conf = wg_enroll.device_config(g("name"), g("pw"))
+                if not conf:
+                    raise ValueError("no such enrolled device / wrong master password")
+                r = wg_tunnel.connect(g("name"), conf)
+                msg = (f"tunnel '{g('name')}' up" if r.get("ok")
+                       else f"! {r.get('error', 'connect failed')}"
+                            + (f" — {r['hint']}" if r.get("hint") else ""))
+            elif action == "wg_disconnect":
+                from ghosted import wg_tunnel
+
+                r = wg_tunnel.disconnect(g("name"))
+                msg = f"tunnel '{g('name')}' down" if r.get("ok") else f"! {r.get('error', r.get('detail', 'failed'))}"
             elif action == "connect_any":
                 from ghosted import connectivity
 
