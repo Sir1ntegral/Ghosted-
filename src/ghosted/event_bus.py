@@ -25,6 +25,24 @@ __all__ = ["announce", "subscribe", "unsubscribe", "recent", "audit_path"]
 _LOCK = threading.RLock()
 _SUBSCRIBERS: list[Callable[[dict], None]] = []
 _RECENT: deque = deque(maxlen=512)  # ring buffer of recent events for quick inspection
+_MAX_LOG_BYTES = 5 * 1024 * 1024  # rotate the JSONL audit log once it passes 5 MB
+
+
+def _rotate_if_needed(path: str) -> None:
+    """Keep the audit log bounded: past the size cap, roll it to <path>.1 (one previous
+    generation kept) so it never grows without limit. Best-effort, never raises."""
+    try:
+        if os.path.getsize(path) < _MAX_LOG_BYTES:
+            return
+    except OSError:
+        return
+    try:
+        bak = path + ".1"
+        if os.path.exists(bak):
+            os.remove(bak)
+        os.replace(path, bak)
+    except OSError:
+        pass
 
 
 def audit_path() -> str:
@@ -75,7 +93,9 @@ def announce(event: dict) -> dict:
         _RECENT.append(ev)
         subs = list(_SUBSCRIBERS)
     try:
-        with open(audit_path(), "a", encoding="utf-8") as fh:
+        p = audit_path()
+        _rotate_if_needed(p)
+        with open(p, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
     except Exception:  # noqa: BLE001 — audit is best-effort, never blocks
         pass
