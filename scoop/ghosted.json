@@ -1,0 +1,31 @@
+{
+    "version": "0.1.0",
+    "description": "Sovereign, self-contained Windows privacy tool: search homepage, private email, WireGuard mesh, EDR-lite, and its own bundled Tor. No cloud, no dependencies.",
+    "homepage": "https://github.com/Sir1ntegral/Ghosted-",
+    "license": "Proprietary",
+    "notes": [
+        "Ghosted installs per-user and opens its search homepage in your browser on first launch.",
+        "New publisher: Windows SmartScreen may warn 'unknown publisher' - choose More info -> Run anyway."
+    ],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/Sir1ntegral/Ghosted-/releases/download/v0.1.0/Ghosted-Setup.exe#/dl.exe",
+            "hash": "86e8338a575ce4299236466dfd0863ee74acd9350601a8e3424b36d7d827ada0"
+        }
+    },
+    "innosetup": true,
+    "shortcuts": [
+        [
+            "Ghosted.exe",
+            "Ghosted"
+        ]
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/Sir1ntegral/Ghosted-/releases/download/v$version/Ghosted-Setup.exe#/dl.exe"
+            }
+        }
+    }
+}
