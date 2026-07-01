@@ -614,6 +614,7 @@ def _results_page(query: str, ctx: dict | None = None) -> str:
 _SESSIONS: dict = {}  # token -> expiry epoch
 _SESSIONS_LOCK = threading.Lock()
 _SESSION_TTL = 12 * 3600  # sessions expire after 12h
+_REMEMBER_TTL = 30 * 24 * 3600  # "stay logged in" — persistent cookie, 30 days
 _SESSIONS_MAX = 1024  # bound the map (anti-growth)
 _LOGIN_FAILS: dict = {}  # ip -> (fail_count, window_start) — brute-force guard
 _LOGIN_MAX = 5  # failures per window before lockout
@@ -749,6 +750,8 @@ def _login_page(msg: str = "") -> str:
 <form action="/login" method="post" autocomplete="off" class="acct" style="text-align:center">
   <input type="password" name="pw" placeholder="master password" autofocus>
   {fields}{loc}
+  <label class="muted" style="display:block;margin:8px 0 2px;text-align:left">
+    <input type="checkbox" name="remember" value="1"> stay logged in on this device</label>
   <div class="btns">{send}<button type="submit" name="submit" value="1">Sign in</button></div>
   {policy}
 </form>
@@ -1251,8 +1254,11 @@ class _Handler(BaseHTTPRequestHandler):
             return
         # ── PERSONAL routes — account holder only ─────────────────────────────────
         if path == "/logout":
+            tok = _cookie_token(self)
             with _SESSIONS_LOCK:
-                _SESSIONS.pop(_cookie_token(self), None)
+                _SESSIONS.pop(tok, None)
+            with _MAIL_LOCK:  # drop the in-memory mailbox key too
+                _MAIL_KEYS.pop(tok, None)
             self.send_response(303)
             self.send_header("Set-Cookie", "rg_session=; Max-Age=0; Path=/")
             self.send_header("Location", "/")
@@ -1282,13 +1288,23 @@ class _Handler(BaseHTTPRequestHandler):
             # Enrollment gate: a user who hasn't set up their own email is guided to
             # setup; an enrolled user goes straight to their mailbox. "?open=1" lets a
             # not-yet-enrolled user open the private sovereign mailbox anyway.
+            # Mail enrollment prompt happens ONCE, EVER (persisted), then never again:
+            # a not-yet-enrolled user is guided to setup on their first ever mailbox
+            # visit; afterwards (or with ?open=1, or once actually enrolled) they go
+            # straight to the mailbox.
             try:
                 from ghosted import mail as _mail
+                from ghosted import preferences as _prefs
 
                 enrolled = _mail.is_enrolled()
+                prompted = bool(_prefs.get("mail_enroll_prompted"))
             except Exception:
-                enrolled = True  # fail open — never trap the user out of their mailbox
-            if not enrolled and not q.get("open"):
+                enrolled, prompted = True, True  # fail open — never trap out of mailbox
+            if not enrolled and not q.get("open") and not prompted:
+                try:
+                    _prefs.set("mail_enroll_prompted", "1")  # mark shown — once, ever
+                except Exception:
+                    pass
                 self._send(_mail_enroll_page(ctx))
                 return
             pw = _mail_get_key(self)
@@ -1343,20 +1359,34 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         return self.rfile.read(length).decode("utf-8", "replace") if length else ""
 
-    def _grant_session(self) -> None:
-        """Mint a session cookie and redirect home (shared by login + first-run setup)."""
+    def _grant_session(self, remember: bool = False, passphrase: str | None = None) -> None:
+        """Mint a session cookie and redirect home (shared by login + first-run setup).
+
+        remember=True issues a persistent cookie (survives browser restarts while the
+        app keeps running) with a longer TTL; otherwise a browser-session cookie.
+        When the master passphrase is supplied it also opens the encrypted mailbox for
+        this session, so login happens ONCE — /mail never re-prompts for the password.
+        The passphrase is held in memory only, never written to disk.
+        """
         tok = secrets.token_urlsafe(32)
         now = time.time()
+        ttl = _REMEMBER_TTL if remember else _SESSION_TTL
         with _SESSIONS_LOCK:
             for _k in [k for k, v in _SESSIONS.items() if v <= now]:
                 _SESSIONS.pop(_k, None)
             if len(_SESSIONS) >= _SESSIONS_MAX:
                 _SESSIONS.clear()
-            _SESSIONS[tok] = now + _SESSION_TTL
+            _SESSIONS[tok] = now + ttl
+        # Login once: seed the mailbox key under the NEW session token (this request
+        # carried no cookie yet), so /mail opens without a second password prompt.
+        if passphrase:
+            with _MAIL_LOCK:
+                _MAIL_KEYS[tok] = (passphrase, now + ttl)
+        cookie = f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict"
+        if remember:  # persistent across browser restarts (session cookie otherwise)
+            cookie += f"; Max-Age={int(ttl)}"
         self.send_response(303)
-        self.send_header(
-            "Set-Cookie", f"rg_session={tok}; HttpOnly; Path=/; SameSite=Strict"
-        )
+        self.send_header("Set-Cookie", cookie)
         self.send_header("Location", "/account")
         self.end_headers()
 
@@ -1527,7 +1557,8 @@ class _Handler(BaseHTTPRequestHandler):
         if result["ok"]:
             with _SESSIONS_LOCK:
                 _LOGIN_FAILS.pop(client, None)
-            self._grant_session()
+            remember = bool((form.get("remember") or [""])[0].strip())
+            self._grant_session(remember=remember, passphrase=pw)
         else:
             self._record_fail(client, now)
             passed = ", ".join(result["passed"]) or "none"
@@ -1576,7 +1607,10 @@ class _Handler(BaseHTTPRequestHandler):
                 mfa.enroll("email", pw, addrs=valid)  # email factor for 2FA
         except Exception:
             pass
-        self._grant_session()
+        # New account → straight in, mailbox already open (login once). pw is empty only
+        # when an authed user re-runs setup to add email; then don't seed a blank key.
+        remember = bool((form.get("remember") or [""])[0].strip())
+        self._grant_session(remember=remember, passphrase=pw or None)
 
     def _handle_account_post(self) -> None:
         if not _is_authed(self):
