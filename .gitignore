@@ -14,6 +14,11 @@ work/
 *.log
 installer_out/
 .build-tmp/
+# PyInstaller onedir bundles produced by build.ps1 / rebuild (exe output, not source)
+Ghosted-FULL/
+Ghosted-LEAN/
+Ghosted-Full/
+Ghosted-Lean/
 
 # Local / runtime
 .pytmp/
