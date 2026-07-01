@@ -86,6 +86,17 @@ def test_feedback_never_raises_on_garbage(tmp_path, monkeypatch):
 def test_doctor_includes_new_capabilities():
     report = contracts.verify_contracts()
     keys = set(report["organs"])
-    for cap in ("health", "spellcheck", "feedback", "setup"):
+    for cap in ("health", "spellcheck", "feedback", "setup", "tor"):
         assert cap in keys
     assert not report["broken"]
+
+
+def test_tor_manager_never_raises():
+    # Discovery + status must be safe to call without launching anything.
+    from ghosted import tor
+
+    st = tor.status()
+    assert isinstance(st, dict) and st["socks"] == "127.0.0.1:9050"
+    assert isinstance(tor.is_socks_up(timeout=0.3), bool)
+    # ensure(block=False) must return promptly and never raise
+    assert isinstance(tor.ensure(block=False), bool)

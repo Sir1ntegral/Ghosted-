@@ -206,6 +206,29 @@ def _network() -> dict[str, Any]:
 
 
 # ── security posture ──────────────────────────────────────────────────────────────
+_EGRESS_CACHE = {"ip": "", "at": 0.0}
+
+
+def _egress_ip() -> str:
+    """The outside-visible IP, cached 120s so repeated health reads don't each do a
+    network round-trip (this is the single slowest part of a snapshot)."""
+    import time
+
+    if _EGRESS_CACHE["ip"] and (time.time() - _EGRESS_CACHE["at"] < 120):
+        return _EGRESS_CACHE["ip"]
+    val = "unknown"
+    try:
+        from ghosted.http import sovereign_http_get
+
+        r = sovereign_http_get("https://api.ipify.org", connect_timeout=4, read_timeout=4)
+        if getattr(r, "success", False) and r.body:
+            val = r.body.decode(errors="replace").strip()
+    except Exception:
+        pass
+    _EGRESS_CACHE["ip"], _EGRESS_CACHE["at"] = val, time.time()
+    return val
+
+
 def _security() -> dict[str, Any]:
     """EDR-lite availability + egress exposure. Posture, not a live scan."""
     out: dict[str, Any] = {}
@@ -221,19 +244,7 @@ def _security() -> dict[str, Any]:
         out["vault"] = "initialized" if vault.is_initialized() else "not set"
     except Exception:
         out["vault"] = "unknown"
-    try:
-        from ghosted.http import sovereign_http_get
-
-        r = sovereign_http_get(
-            "https://api.ipify.org", connect_timeout=4, read_timeout=4
-        )
-        out["egress_ip"] = (
-            r.body.decode(errors="replace").strip()
-            if (getattr(r, "success", False) and r.body)
-            else "unknown"
-        )
-    except Exception:
-        out["egress_ip"] = "unknown"
+    out["egress_ip"] = _egress_ip()
     out["state"] = "ok" if out.get("edr") == "available" else "warn"
     return out
 

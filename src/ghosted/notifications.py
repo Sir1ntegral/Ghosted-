@@ -47,6 +47,7 @@ def dismiss(note_id: str) -> None:
         ids = _dismissed()
         ids.add(note_id)
         atomic_write_json(_dismiss_path(), sorted(ids))
+        _invalidate()  # next collect() recomputes without the dismissed item
     except Exception:
         pass
 
@@ -126,8 +127,24 @@ def _suggestion_notes(prefs) -> list[dict]:
         return []
 
 
+# Cache the computed notifications briefly. Building them touches health (a CPU sample
+# + egress lookup) and the mailbox, so without this the notification BELL would pay that
+# cost on every single page render for a signed-in user. 25s is fresh enough for a badge.
+_CACHE: dict[str, Any] = {"at": 0.0, "notes": []}
+_CACHE_TTL = 25.0
+
+
+def _invalidate() -> None:
+    _CACHE["at"] = 0.0
+
+
 def collect() -> list[dict[str, Any]]:
     """The account holder's current notifications, honouring their opt-in choices."""
+    import time
+
+    now = time.time()
+    if now - _CACHE["at"] < _CACHE_TTL:
+        return _CACHE["notes"]
     try:
         from ghosted import preferences
 
@@ -135,10 +152,13 @@ def collect() -> list[dict[str, Any]]:
     except Exception:
         return []
     if not prefs.get("notifications"):
+        _CACHE.update(at=now, notes=[])
         return []  # master switch is off — notifications are optional
     notes = _health_notes(prefs) + _mail_notes(prefs) + _suggestion_notes(prefs)
     dis = _dismissed()
-    return [n for n in notes if n["id"] not in dis]
+    result = [n for n in notes if n["id"] not in dis]
+    _CACHE.update(at=now, notes=result)
+    return result
 
 
 def count() -> int:

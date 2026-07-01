@@ -88,6 +88,9 @@ CONTRACTS: list[tuple[str, str, list[str], str, str | None, str]] = [
     ("qrcode", "ghosted.qrcode", ["svg", "encode"],
      "sovereign QR generation (authenticator + codes)", None,
      "pure-Python — QR Model 2 byte-mode ECC-M, renders inline SVG, no cloud"),
+    ("tor", "ghosted.tor", ["ensure", "start", "status"],
+     "Tor anonymity egress (auto-started, always available)", None,
+     "pure-stdlib daemon manager — finds tor.exe, runs managed SOCKS 9050, clearnet fallback"),
 ]
 
 

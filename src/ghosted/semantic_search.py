@@ -1,7 +1,7 @@
 """
-Rabbit Semantic Search — re-rank web results by meaning, context, and sentiment.
+Ghosted Semantic Search — re-rank web results by meaning, context, and sentiment.
 
-Google ranks on keywords + link graph. Rabbit re-ranks the candidate set on:
+Google ranks on keywords + link graph. Ghosted re-ranks the candidate set on:
   • relevance  — BM25-lite term scoring, title-weighted
   • context    — query-bigram/phrase proximity + query-term coverage (completeness)
   • meaning    — cosine over the trained SovereignSemanticModel vectors WHEN available
@@ -164,8 +164,12 @@ def _lexical(qtoks: list[str], dtoks: list[str]) -> float:
 
 
 def warm() -> None:
-    """Pre-pay the one-time dominance lexicon load (~2.7s) so the FIRST search is fast.
-    Call at server startup (background thread). After this, intent is ~0.9ms/call."""
+    """Pre-load the meaning-model + intent lexicon at server startup (background thread)
+    so the FIRST search doesn't pay the one-time load cost."""
+    try:
+        _semantic_model()  # load + cache the trained meaning vectors
+    except Exception:
+        pass
     try:
         _intent_domain("warmup query")
     except Exception:
@@ -187,7 +191,7 @@ def _feedback_boost(query: str, url: str) -> float:
 
 def rerank(query: str, results: list):
     """Re-rank web results with surgical precision. Returns the same objects,
-    re-ordered, each annotated with _rabbit_score / _rabbit_sentiment / _rabbit_semantic.
+    re-ordered, each annotated with _ghosted_score / _ghosted_sentiment / _ghosted_semantic.
     """
     try:
         qtoks = _toks(query)
@@ -239,9 +243,9 @@ def rerank(query: str, results: list):
         out = []
         for score, senti, sem, r in scored:
             try:
-                r._rabbit_score = round(float(score), 3)
-                r._rabbit_sentiment = round(float(senti), 2)
-                r._rabbit_semantic = round(float(sem), 3)
+                r._ghosted_score = round(float(score), 3)
+                r._ghosted_sentiment = round(float(senti), 2)
+                r._ghosted_semantic = round(float(sem), 3)
             except Exception:
                 pass
             out.append(r)

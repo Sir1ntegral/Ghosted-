@@ -30,7 +30,7 @@ def test_meaning_vectors_rank_by_meaning():
         ],
     )
     assert ranked[0].title == "network security threats"
-    assert ranked[0]._rabbit_semantic > 0  # meaning-vectors contributed
+    assert ranked[0]._ghosted_semantic > 0  # meaning-vectors contributed
 
 
 def test_semantic_search_imports_and_ranks():
@@ -48,8 +48,8 @@ def test_semantic_search_imports_and_ranks():
     ]
     ranked = ss.rerank("secure private browser", results)
     assert ranked[0].title == "secure private browser"  # relevant floats up
-    assert hasattr(ranked[0], "_rabbit_score")
-    assert hasattr(ranked[0], "_rabbit_sentiment")
+    assert hasattr(ranked[0], "_ghosted_score")
+    assert hasattr(ranked[0], "_ghosted_sentiment")
 
 
 def test_ranker_never_raises_on_bad_input():
