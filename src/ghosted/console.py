@@ -195,6 +195,14 @@ def menu() -> None:
         _t.Thread(target=tor.start, daemon=True).start()
     except Exception:
         pass
+    try:  # non-blocking: check for a newer version, announce if one exists
+        import threading as _tu
+
+        from ghosted import updater
+
+        _tu.Thread(target=updater.check_and_notify, daemon=True).start()
+    except Exception:
+        pass
     actions = textwrap.dedent(
         """
         commands:
@@ -208,6 +216,7 @@ def menu() -> None:
           network           build a WireGuard mesh, sealed in the vault (login first)
           wg <sub> [name]   WireGuard: status|roster|enroll|join|connect|disconnect
           defense           Ghosted self-defense posture (Gojo + crypto + EDR + bus)
+          update [apply]    check for a new version (add 'apply' to download + install)
           encrypt <text>    seal text with GHOSTED-CIPHER-1 (passphrase)
           decrypt           open a sealed blob (paste token + passphrase)
           parse <path|text> extract text/structure (pdf/docx/html/csv/json/img via OCR)
@@ -496,6 +505,26 @@ def handle_command(
         from ghosted import defense
 
         out(defense.status())
+    elif cmd == "update":
+        from ghosted import updater
+
+        info = updater.check()
+        if not info.get("available"):
+            out({"up_to_date": True, "current": info.get("current"),
+                 **({"error": info["error"]} if info.get("error") else {})})
+        elif rest.strip().lower() != "apply":
+            out({"update_available": info.get("latest"), "current": info.get("current"),
+                 "notes": (info.get("notes") or "")[:200], "hint": "run 'update apply' to install"})
+        else:
+            out({"downloading": info.get("latest")})
+            dl = updater.download(info)
+            if not dl.get("ok"):
+                out(dl)
+            else:
+                r = updater.apply(dl["path"])
+                out(r)
+                if r.get("applying"):
+                    return False  # exit so the installer can replace files
     elif cmd == "wg":
         # WireGuard: enroll devices (both directions), connect/disconnect real tunnels.
         from ghosted import wg_enroll, wg_tunnel

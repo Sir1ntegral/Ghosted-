@@ -2142,6 +2142,14 @@ def serve(port: int = _PORT) -> None:
         _t2.Thread(target=tor.start, daemon=True).start()
     except Exception:
         pass
+    try:  # non-blocking: check for a newer version, announce if one exists
+        import threading as _tu
+
+        from ghosted import updater
+
+        _tu.Thread(target=updater.check_and_notify, daemon=True).start()
+    except Exception:
+        pass
     cls = _classify(_all_local_ips())
     print(f"🐰 Ghosted home page live — reachable by IP on port {port}:")
     print(f"   local:     http://127.0.0.1:{port}")
