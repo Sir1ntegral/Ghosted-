@@ -10,7 +10,7 @@ from __future__ import annotations
 
 # category -> list of (command, summary, detail)
 HELP: dict[str, list[tuple[str, str, str]]] = {
-    "Ghost (stealth)": [
+    "Search & privacy": [
         (
             "recon <topic>",
             "stealth-investigate a topic",

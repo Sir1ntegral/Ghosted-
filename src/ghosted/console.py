@@ -31,7 +31,7 @@ BANNER = r"""
  | |  _| |_| | | | \___ \ | | |  _| | | | |
  | |_| |  _  | |_| |___) || | | |___| |_| |
   \____|_| |_|\___/|____/ |_| |_____|____/
-        sovereign stealth console — ghost + browser
+        Ghosted — sovereign search · mail · privacy
 """
 
 
@@ -181,6 +181,14 @@ def menu() -> None:
         flusher.start_autoflush()
     except Exception:
         pass
+    try:  # bring Tor up in the background so the Tor face is always ready
+        import threading as _t
+
+        from ghosted import tor
+
+        _t.Thread(target=tor.start, daemon=True).start()
+    except Exception:
+        pass
     actions = textwrap.dedent(
         """
         commands:
@@ -202,10 +210,12 @@ def menu() -> None:
           mfa               multi-factor status (password + 2 factors required)
           prefs [set k v]   customize your experience (accent/notifications/…)
           notify            your optional notifications
+          tor [sub]         Tor anonymity: status | start | stop | ip (auto-starts)
           health            device health: CPU/RAM/disk/battery/net/security
           feedback [sub]    learning loop: summary | good <q> | bad <q> | rate <s> <q>
-          connect           check internet across wifi/LAN/WAN (multi-interface)
-          hotspot           start a WiFi hotspot for the mesh (Windows, needs admin)
+          connect           get online by ANY door (wifi/LAN/ethernet, else dial-up)
+          dialup [sub]      dial-up / RAS: list | connect <name> | disconnect
+          hotspot           share the connection as a WiFi hotspot (Windows, admin)
           contacts          list saved contacts
           filters           list mail filter rules
           mail [sub]        black-box mail: inbox|read|compose|send <peer>|ext|pull <imap|pop>
@@ -233,13 +243,23 @@ def menu() -> None:
 
             from ghosted import homepage
 
+            import socket as _sock
+
             port = homepage._PORT
             t = threading.Thread(target=homepage.serve, args=(port,), daemon=True)
             t.start()
             session["home_thread"] = t
             session["home_port"] = port
-            _time.sleep(0.7)  # let it bind before opening the browser
+            # Wait until the homepage is actually accepting connections, THEN open the
+            # browser — so clicking the desktop icon always lands on a live homepage
+            # (never a "can't connect" race).
             url = f"http://127.0.0.1:{port}"
+            for _ in range(50):  # up to ~10s
+                try:
+                    with _sock.create_connection(("127.0.0.1", port), timeout=0.2):
+                        break
+                except Exception:
+                    _time.sleep(0.2)
             try:
                 webbrowser.open(url)
             except Exception:
@@ -323,6 +343,20 @@ def handle_command(
             pass
         out({"homepage": "live", "open": url,
              "note": "search website running; this console stays active"})
+    elif cmd == "tor":
+        from ghosted import tor
+
+        sub = rest.strip().lower()
+        if sub in ("", "status"):
+            out(tor.status())
+        elif sub == "start":
+            out(tor.start())
+        elif sub == "stop":
+            out({"stopped": tor.stop()})
+        elif sub in ("ip", "egress"):
+            out({"tor_egress_ip": tor.egress_ip()})
+        else:
+            out({"usage": "tor [status | start | stop | ip]"})
     elif cmd == "health":
         from ghosted import health
 
@@ -562,9 +596,25 @@ def handle_command(
                 }
             )
     elif cmd == "connect":
+        # Get online by ANY available door: existing link, else dial a configured ISP.
         from ghosted import connectivity
 
-        out(connectivity.ensure_online())
+        out(connectivity.ensure_online_any())
+    elif cmd == "dialup":
+        from ghosted import connectivity
+
+        sub, _, arg = rest.partition(" ")
+        sub = sub.strip().lower()
+        if sub in ("", "list"):
+            out({"dialup_connections": connectivity.dialup_entries()})
+        elif sub == "connect":
+            name, _, rest2 = arg.partition(" ")
+            user, _, pwd = rest2.partition(" ")
+            out(connectivity.dialup_connect(name.strip(), user.strip(), pwd.strip()))
+        elif sub == "disconnect":
+            out(connectivity.dialup_disconnect(arg.strip()))
+        else:
+            out({"usage": "dialup [list | connect <name> [user] [pass] | disconnect [name]]"})
     elif cmd == "hotspot":
         from ghosted import connectivity
 
@@ -601,7 +651,7 @@ def handle_command(
                 out("usage: mail read <index|path>")
                 return True
             out(mail.read(target, getpw("passphrase: ")))
-        elif sub == "compose":  # seal into the local black-box mailbox
+        elif sub == "compose":  # seal into the local encrypted mailbox
             to = ask("to: ").strip()
             subject = ask("subject: ").strip()
             body = ask("body: ")

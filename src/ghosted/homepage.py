@@ -119,9 +119,9 @@ def _search(query: str) -> list:
             type("E", (), {"title": "search error", "url": "", "snippet": str(e)})()
         ]
     try:  # semantic re-rank: meaning / context / sentiment (degrades, never breaks)
-        from ghosted import semantic_search as rabbit_search
+        from ghosted import semantic_search
 
-        return rabbit_search.rerank(query, results)
+        return semantic_search.rerank(query, results)
     except Exception:
         return results
 
@@ -156,7 +156,7 @@ def _gate():
             ap = _gojo_audit_path()
             _GATE = GojoBoundaryGate(audit_log_path=ap) if ap else GojoBoundaryGate()
             print(
-                "🛡  Gojo boundary engaged — every request is gated, throttled, audited."
+                "🛡  Security boundary engaged — every request is gated, throttled, audited."
             )
         except Exception as e:
             print(
@@ -565,8 +565,8 @@ def _results_page(query: str, ctx: dict | None = None) -> str:
         # XSS guard: only http(s)/relative hrefs are clickable; javascript:/data: → inert
         href = url if raw_url.lower().startswith(("http://", "https://", "/")) else "#"
         snip = html.escape(getattr(r, "snippet", "") or "")
-        score = getattr(r, "_rabbit_score", None)
-        senti = getattr(r, "_rabbit_sentiment", None)
+        score = getattr(r, "_ghosted_score", None)
+        senti = getattr(r, "_ghosted_sentiment", None)
         badge = ""
         if score is not None:
             mood = (
@@ -574,7 +574,7 @@ def _results_page(query: str, ctx: dict | None = None) -> str:
                 if (senti or 0) > 0.15
                 else ("⚠ negative" if (senti or 0) < -0.15 else "· neutral")
             )
-            sem = getattr(r, "_rabbit_semantic", 0.0)
+            sem = getattr(r, "_ghosted_semantic", 0.0)
             meaning = f" · meaning {sem}" if sem else ""
             badge = f'<div class="b">relevance {score}{meaning} · sentiment {senti} {mood}</div>'
         # click beacon: which result, what rank — captured, not wasted
@@ -620,8 +620,9 @@ _LOGIN_MAX = 5  # failures per window before lockout
 _LOGIN_WINDOW = 300  # 5 min
 
 # Webmail keeps the passphrase in MEMORY only (never disk) for the session, so the
-# black-box mailbox can be opened to read/search without re-typing it every action.
+# encrypted mailbox can be opened to read/search without re-typing it every action.
 _MAIL_KEYS: dict = {}  # token -> (passphrase, expiry)
+_MAIL_PREVIEW: dict = {}  # box path -> (subject, from) — cache so inbox re-renders are free
 _MAIL_LOCK = threading.Lock()
 
 
@@ -738,7 +739,7 @@ def _login_page(msg: str = "") -> str:
         send += '<button type="submit" name="send" value="email">Send email code</button>'
     if "phone" in enrolled:
         send += '<button type="submit" name="send" value="phone">Send text code</button>'
-    policy = ('<div class="muted">two factors required (password + 2)</div>'
+    policy = ('<div class="muted">master password + 2 security factors required</div>'
               if len(enrolled) >= 2 else
               '<div class="muted">add more factors in your account for full protection</div>')
     return f"""<!doctype html><html><head><meta charset="utf-8">
@@ -798,10 +799,16 @@ def _health_page(ctx: dict | None = None) -> str:
 </body></html>"""
 
 
-def _account_page(ctx: dict | None = None) -> str:
+def _account_page(ctx: dict | None = None, msg: str = "") -> str:
     """The account holder's full account-info page: all personal data + history +
-    statistical use, plus preferences, optional notifications, and multi-factor setup."""
+    statistical use, plus preferences, optional notifications, and multi-factor setup.
+    `msg` shows a result banner (green for success, red for an error starting with !)."""
     ctx = ctx or {"authed": True, "name": "", "accent": "#9aa9ff", "notes": 0}
+    banner = ""
+    if msg:
+        err = msg.startswith("!")
+        banner = (f'<div class="tag" style="color:{"#ff8aa0" if err else "#7bd88f"}">'
+                  f'{html.escape(msg.lstrip("! "))}</div>')
     from ghosted import feedback, mail, mfa, notifications, preferences, vault
 
     prefs = preferences.all()
@@ -909,6 +916,7 @@ def _account_page(ctx: dict | None = None) -> str:
 {_toolbar(ctx)}
 <div class="logo" style="font-size:34px;margin-top:64px">👤 <b>{html.escape(prefs["display_name"] or "Your account")}</b></div>
 <div class="tag">all your personal data, history &amp; usage — private to you</div>
+{banner}
 <div class="btns" style="margin:6px 0 4px"><button onclick="location.href='/mail'">✉ Open your mailbox</button>
  <button onclick="location.href='/'">🏠 Home</button></div>
 {_status_summary}
@@ -974,6 +982,19 @@ def _account_page(ctx: dict | None = None) -> str:
    <input type="password" name="pw" placeholder="your master password (to view configs)">
    <div class="btns"><button type="submit">View / export mesh configs</button></div></form>
 
+  <h3>Connection &amp; hotspot</h3>
+  <div class="muted">Get online by any available door (wifi / ethernet, else dial-up), and
+   share it as a WiFi hotspot so your devices join. Hotspot needs admin + a capable adapter.</div>
+  <form action="/account" method="post" style="display:inline-block;margin-right:8px">
+   <input type="hidden" name="action" value="connect_any">
+   <div class="btns"><button type="submit">🌐 Get online (any door)</button></div></form>
+  <form action="/account" method="post" style="display:inline-block;margin-right:8px">
+   <input type="hidden" name="action" value="hotspot_on">
+   <div class="btns"><button type="submit">📶 Activate hotspot</button></div></form>
+  <form action="/account" method="post" style="display:inline-block">
+   <input type="hidden" name="action" value="hotspot_off">
+   <div class="btns"><button type="submit">⏹ Deactivate hotspot</button></div></form>
+
   <h3>Usage statistics</h3>{stats}
   <h3>Recent search history</h3>{hist_rows}
 
@@ -995,7 +1016,8 @@ def _qr_page(enrollment: dict, ctx: dict | None = None) -> str:
     secret = html.escape(enrollment.get("secret", ""))
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Authenticator</title>
 <style>{_CSS}</style></head><body>
-<div class="logo" style="font-size:32px;margin-top:60px">🔐 <b>Scan this QR</b></div>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:32px;margin-top:64px">🔐 <b>Scan this QR</b></div>
 <div class="tag">scan with your authenticator app — or type the secret below</div>
 <div style="background:#fff;padding:14px;border-radius:12px;margin:14px">{qr}</div>
 <div class="acct" style="text-align:center">
@@ -1009,9 +1031,11 @@ def _qr_page(enrollment: dict, ctx: dict | None = None) -> str:
 def _codes_page(codes: list, ctx: dict | None = None) -> str:
     """Shown once after generating recovery codes — store them safely (one-time use)."""
     rows = "".join(f'<div class="row"><b>{html.escape(c)}</b></div>' for c in codes)
+    ctx = ctx or {"authed": True, "accent": "#9aa9ff", "notes": 0}
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Recovery codes</title>
 <style>{_CSS}</style></head><body>
-<div class="logo" style="font-size:30px;margin-top:60px">🗝 <b>Recovery codes</b></div>
+{_toolbar(ctx)}
+<div class="logo" style="font-size:30px;margin-top:64px">🗝 <b>Recovery codes</b></div>
 <div class="tag">store these safely — each works once if you lose a factor</div>
 <div class="acct" style="text-align:center">{rows}
 <div class="tag"><a href="/account" style="color:#9aa9ff;text-decoration:none">← back to account</a></div></div>
@@ -1046,11 +1070,11 @@ def _mail_unlock_page(ctx: dict, msg: str = "") -> str:
 <style>{_CSS}</style>{_accent_style(ctx)}</head><body>
 {_toolbar(ctx)}
 <div class="logo" style="font-size:32px;margin-top:64px">✉ <b>Your mail</b></div>
-<div class="tag">enter your passphrase to open your black-box mailbox</div>
+<div class="tag">enter your passphrase to open your encrypted mailbox</div>
 <form action="/mail" method="post" autocomplete="off" class="acct" style="text-align:center">
   <input type="hidden" name="action" value="unlock">
-  <input type="password" name="pw" placeholder="mailbox passphrase (your master password)" autofocus>
-  <div class="btns"><button type="submit">Open mailbox</button></div>
+  <input type="password" name="pw" placeholder="your master password" autofocus>
+  <div class="btns"><button type="submit">Unlock mailbox</button></div>
 </form>{err}
 </body></html>"""
 
@@ -1077,21 +1101,29 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "") -> str:
             reading = '<div class="acct"><div class="row muted">cannot open this message with your key</div></div>'
     rows = []
     for i, path in list(enumerate(boxes))[::-1][:60]:
-        try:
-            m = mail.read(path, pw)
-            frm = html.escape(str(m.get("from", ""))[:40])
-            subj = html.escape(str(m.get("subject", "(no subject)"))[:80])
-            rows.append(f'<div class="row"><a href="/mail?id={i}" style="color:#9aa9ff;text-decoration:none">'
-                        f'<b>{subj}</b> <span class="muted">— {frm}</span></a></div>')
-        except Exception:
-            rows.append('<div class="row muted">🔒 sealed (different key)</div>')
+        # Box files are immutable once sealed, so cache the decrypted (subject, from)
+        # preview per path — re-renders of the inbox then cost zero crypto.
+        prev = _MAIL_PREVIEW.get(path)
+        if prev is None:
+            try:
+                m = mail.read(path, pw)
+                prev = (str(m.get("subject", "(no subject)"))[:80], str(m.get("from", ""))[:40])
+                _MAIL_PREVIEW[path] = prev
+                if len(_MAIL_PREVIEW) > 500:  # bound the cache
+                    _MAIL_PREVIEW.pop(next(iter(_MAIL_PREVIEW)))
+            except Exception:
+                rows.append('<div class="row muted">🔒 sealed (different key)</div>')
+                continue
+        subj, frm = html.escape(prev[0]), html.escape(prev[1])
+        rows.append(f'<div class="row"><a href="/mail?id={i}" style="color:#9aa9ff;text-decoration:none">'
+                    f'<b>{subj}</b> <span class="muted">— {frm}</span></a></div>')
     inbox_rows = "".join(rows) or '<div class="row muted">inbox empty</div>'
     accts = "".join(f'<option value="{html.escape(a)}">{html.escape(a)}</option>' for a in mail.accounts())
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — Mail</title>
 <style>{_CSS}</style>{_accent_style(ctx)}</head><body>
 {_toolbar(ctx)}
 <div class="logo" style="font-size:30px;margin-top:64px">✉ <b>Your mail</b></div>
-<div class="tag">black-box mailbox · send · receive · read — private to you</div>{note}
+<div class="tag">encrypted mailbox · send · receive · read — private to you</div>{note}
 {reading}
 <div class="acct">
   <h3>Compose</h3>
@@ -1172,7 +1204,7 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if not _gojo_admits(self.client_address[0], parsed.path):
-            self._send("<h1>403 — Gojo boundary denied</h1>", 403)
+            self._send("<h1>403 — Access denied</h1>", 403)
             return
         path = parsed.path
         ctx = _ctx(self)
@@ -1267,6 +1299,8 @@ class _Handler(BaseHTTPRequestHandler):
         """Read the request body with a size cap (anti memory-DoS). None on error."""
         try:
             length = int(self.headers.get("Content-Length", "0") or 0)
+            if length < 0:
+                raise ValueError("negative Content-Length")
         except ValueError:
             self._send("<h1>400 — bad Content-Length</h1>", 400)
             return None
@@ -1295,7 +1329,7 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if not _gojo_admits(self.client_address[0], parsed.path):
-            self._send("<h1>403 — Gojo boundary denied</h1>", 403)
+            self._send("<h1>403 — Access denied</h1>", 403)
             return
         path = parsed.path
         # ── public feedback beacons — every interaction is a data point ───────────
@@ -1343,36 +1377,48 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_header("Location", "/mail")
                 self.end_headers()
             else:
-                self._send(_mail_unlock_page(ctx, "wrong passphrase"))
+                self._send(_mail_unlock_page(ctx, "incorrect master password"))
             return
         pw = _mail_get_key(self)
         if not pw:
             self._send(_mail_unlock_page(ctx))
             return
+        def _port(s, default):
+            if not s:
+                return default
+            if not s.isdigit() or not (1 <= int(s) <= 65535):
+                raise ValueError(f"port must be 1–65535 (got '{s}')")
+            return int(s)
+
         msg = ""
         try:
             if action == "send":
                 to, subject, mbody = g("to").strip(), g("subject"), g("body")
+                if "@" not in to:
+                    raise ValueError("a recipient email address is required")
                 if g("mode") == "external" and g("smtp_host"):
                     from ghosted import bridge
 
-                    port_s = g("smtp_port")
                     bridge.send_external(
                         to, subject, mbody,
                         from_addr=g("from_addr") or mail.address("me"),
                         smtp_host=g("smtp_host"),
-                        smtp_port=int(port_s) if port_s.isdigit() else 587,
+                        smtp_port=_port(g("smtp_port"), 587),
                         username=g("smtp_user") or None,
                         password=g("smtp_pass") or None,
                     )
-                    msg = f"sent externally to {to}"
+                    msg = f"sent to {to} via external email"
                 else:
                     mail.send(to, subject, mbody, pw)
-                    msg = f"sealed + sent to {to} (sovereign / mesh)"
+                    msg = f"message sent to {to} on the mesh"
             elif action == "pull":
                 from ghosted import imap_pull
 
                 host, user, pwd = g("host"), g("username"), g("password")
+                if not host:
+                    raise ValueError("the IMAP/POP server host is required")
+                if not user:
+                    raise ValueError("your email username is required")
                 if not pwd:  # fall back to a saved (encrypted) email password
                     for addr, c in mail.accounts().items():
                         if user.lower() in (addr, c.get("username", "").lower()) or c.get("host") == host:
@@ -1380,16 +1426,16 @@ class _Handler(BaseHTTPRequestHandler):
                             if saved:
                                 pwd = saved
                                 break
-                port_s = g("port")
+                if not pwd:
+                    raise ValueError("no password — enter it, or save one on your account first")
                 if g("proto") == "pop":
-                    r = imap_pull.pull_pop(host, user, pwd, pw,
-                                           port=int(port_s) if port_s.isdigit() else 995)
+                    r = imap_pull.pull_pop(host, user, pwd, pw, port=_port(g("port"), 995))
                 else:
-                    r = imap_pull.pull_imap(host, user, pwd, pw,
-                                            port=int(port_s) if port_s.isdigit() else 993)
-                msg = f"fetched {r.get('sealed', 0)} message(s) into your mailbox"
-        except Exception as e:  # noqa: BLE001 — surface the error, never 500
-            msg = f"error: {type(e).__name__}: {e}"
+                    r = imap_pull.pull_imap(host, user, pwd, pw, port=_port(g("port"), 993))
+                _MAIL_PREVIEW.clear()  # new mail arrived → refresh the inbox preview cache
+                msg = f"imported {r.get('sealed', 0)} message(s) into your mailbox"
+        except Exception as e:  # surface the error, never 500
+            msg = f"could not complete: {e}"
         self._send(_mail_page(ctx, pw, -1, msg))
 
     def _record_fail(self, client: str, now: float) -> None:
@@ -1429,10 +1475,14 @@ class _Handler(BaseHTTPRequestHandler):
         send = (form.get("send") or [""])[0].strip()
         if send in ("email", "phone"):
             ch = mfa.challenge(send, pw)
-            if ch.get("shown"):
+            if ch.get("error"):
+                msg = f"could not send {send} code: {ch['error']}"
+            elif ch.get("shown"):
                 msg = f"offline — your {send} code is {ch['shown']}"
-            else:
+            elif ch.get("delivered"):
                 msg = f"code sent via {ch.get('via', send)} — enter it below"
+            else:
+                msg = f"could not deliver the {send} code — try another factor"
             self._send(_login_page(msg))
             return
         # Second + third means: collect factor proofs and validate (location auto).
@@ -1480,15 +1530,16 @@ class _Handler(BaseHTTPRequestHandler):
                 from ghosted import preferences
 
                 preferences.set("display_name", name)
-            if emails:
+            valid = [e for e in emails if "@" in e]
+            if valid:
                 from ghosted import mail, mfa
 
-                for e in emails:
+                for e in valid:
                     try:
                         mail.add_identity(e)
                     except Exception:
                         pass
-                mfa.enroll("email", pw, addrs=emails)  # email factor for 2FA
+                mfa.enroll("email", pw, addrs=valid)  # email factor for 2FA
         except Exception:
             pass
         self._grant_session()
@@ -1503,85 +1554,119 @@ class _Handler(BaseHTTPRequestHandler):
         form = parse_qs(body)
         action = (form.get("action") or [""])[0]
         g = lambda k, d="": (form.get(k) or [d])[0].strip()  # noqa: E731
-        from ghosted import mail, mfa, preferences, vault
+        from ghosted import mail, mfa, notifications, preferences, vault
 
         # The account must exist before you can manage it — no orphaned factors.
         if not vault.is_initialized():
             self._send(_login_page("create your account first (set a master password)"))
             return
-        # Enrolling a sealed factor requires the REAL master password, so a factor can
-        # never be sealed under a key that doesn't match the vault (the bug that locked
-        # the mailbox: 2FA enrolled while no master password existed).
-        if action in ("enroll_authenticator", "enroll_recovery") and not vault.login(g("pw")):
-            self.send_response(303)
-            self.send_header("Location", "/account")
-            self.end_headers()
+        # Actions that seal data under the master password must verify it FIRST, so a
+        # secret is never sealed under a key that doesn't match the vault.
+        if action in ("enroll_authenticator", "enroll_recovery", "build_mesh", "view_mesh") \
+                and not vault.login(g("pw")):
+            self._send(_account_page(_ctx(self), "! wrong master password — nothing changed"))
             return
+
+        def _port(s, default):
+            if not s:
+                return default
+            if not s.isdigit() or not (1 <= int(s) <= 65535):
+                raise ValueError(f"port must be 1–65535 (got '{s}')")
+            return int(s)
+
+        msg = ""
         try:
             if action == "save_prefs":
-                # Checkboxes are only present when ticked → absent means False.
                 bools = ("notifications", "notify_health", "notify_mail",
                          "notify_suggestions", "voice_autoread", "show_badges")
                 vals = {b: (b in form) for b in bools}
                 vals["display_name"] = g("display_name")
                 vals["accent"] = g("accent", "violet")
                 preferences.update(vals)
+                notifications._invalidate()  # pref change may change the bell
+                msg = "preferences saved"
             elif action == "enroll_authenticator":
                 en = mfa.enroll("authenticator", g("pw"))
-                if "secret" in en:  # show the QR once (needs the master password to seal)
-                    self._send(_qr_page(en, _ctx(self)))
-                    return
+                self._send(_qr_page(en, _ctx(self)))  # show the QR once
+                return
             elif action == "enroll_phone":
+                if not g("number"):
+                    raise ValueError("a mobile number is required for text codes")
                 mfa.enroll("phone", g("pw"), number=g("number"), carrier=g("carrier"))
+                msg = "text-message factor enrolled"
             elif action == "enroll_location":
                 mfa.enroll("location", g("pw"), ip=self.client_address[0] if self.client_address else "")
+                msg = "this network is now a trusted-location factor"
             elif action == "enroll_recovery":
                 rc = mfa.enroll("recovery", g("pw"))
-                if rc.get("recovery_codes"):
-                    self._send(_codes_page(rc["recovery_codes"], _ctx(self)))
-                    return
+                self._send(_codes_page(rc["recovery_codes"], _ctx(self)))
+                return
             elif action == "add_identity":
+                if "@" not in g("email"):
+                    raise ValueError("a valid email address is required")
                 mail.add_identity(g("email"))
+                msg = f"identity {g('email')} added"
             elif action == "add_account":
-                port_s = g("port")
-                mail.set_account(g("email"), g("protocol", "imap") or "imap",
-                                 g("host"), int(port_s) if port_s.isdigit() else 0, g("email"),
-                                 password=g("password"), master_pw=g("pw"))
+                if "@" not in g("email"):
+                    raise ValueError("a valid email address is required")
+                if g("password") and not vault.login(g("pw")):
+                    raise ValueError("master password required (and correct) to save the email password")
+                proto = g("protocol", "imap") or "imap"
+                mail.set_account(g("email"), proto, g("host"), _port(g("port"), 0),
+                                 g("email"), password=g("password"), master_pw=g("pw"))
+                msg = f"email account {g('email')} saved" + (" with password" if g("password") else "")
             elif action == "set_account_pw":
-                mail.set_account_password(g("email"), g("password"), g("pw"))
+                if not vault.login(g("pw")):
+                    raise ValueError("wrong master password — email password not saved")
+                if mail.set_account_password(g("email"), g("password"), g("pw")):
+                    msg = "email password saved (encrypted)" if g("password") else "email password removed"
+                else:
+                    raise ValueError("no such email account")
             elif action == "remove_identity":
-                mail.remove_identity(g("email"))
+                msg = "identity removed" if mail.remove_identity(g("email")) else "identity not found"
             elif action == "remove_account":
-                mail.remove_account(g("email"))
+                msg = "email account removed" if mail.remove_account(g("email")) else "account not found"
             elif action == "remove_factor":
-                mfa.remove(g("factor"), g("pw"))
+                msg = "factor disabled" if mfa.remove(g("factor"), g("pw")) \
+                    else "! could not disable that factor (check your master password)"
             elif action == "build_mesh":
                 pw = g("pw")
-                if not vault.login(pw):
-                    self._send(_account_page(_ctx(self)))
-                    return
                 devices = []
                 for line in (form.get("devices") or [""])[0].splitlines():
                     parts = line.split()
                     if parts:
                         devices.append((parts[0], parts[1] if len(parts) > 1 else ""))
-                if devices:
-                    vault.build_and_seal_mesh(devices, pw, hub=g("hub"))
-                    self._send(_mesh_page(vault.unseal_mesh(pw), _ctx(self),
-                                          f"enrolled {len(devices)} device(s) into your mesh"))
-                    return
-            elif action == "view_mesh":
-                pw = g("pw")
-                if vault.has_mesh() and vault.login(pw):
-                    self._send(_mesh_page(vault.unseal_mesh(pw), _ctx(self)))
-                    return
-                self._send(_account_page(_ctx(self)))
+                if not devices:
+                    raise ValueError("add at least one device (one per line)")
+                vault.build_and_seal_mesh(devices, pw, hub=g("hub"))
+                self._send(_mesh_page(vault.unseal_mesh(pw), _ctx(self),
+                                      f"enrolled {len(devices)} device(s) into your mesh"))
                 return
-        except Exception:
-            pass  # bad field → just re-render the dashboard, never 500
-        self.send_response(303)
-        self.send_header("Location", "/account")
-        self.end_headers()
+            elif action == "view_mesh":
+                if not vault.has_mesh():
+                    raise ValueError("no WireGuard mesh configured yet — build one first")
+                self._send(_mesh_page(vault.unseal_mesh(g("pw")), _ctx(self)))
+                return
+            elif action == "connect_any":
+                from ghosted import connectivity
+
+                r = connectivity.ensure_online_any()
+                msg = (f"online via {r.get('via')}" if r.get("online")
+                       else f"! {r.get('via', 'no path available')}")
+            elif action == "hotspot_on":
+                from ghosted import connectivity
+
+                r = connectivity.start_hotspot()
+                msg = "hotspot activated" if r.get("ok") else f"! hotspot failed: {r.get('error', r.get('detail', 'unknown'))}"
+            elif action == "hotspot_off":
+                from ghosted import connectivity
+
+                r = connectivity.stop_hotspot()
+                msg = "hotspot deactivated" if r.get("ok") else f"! could not stop hotspot: {r.get('error', r.get('detail', 'unknown'))}"
+        except Exception as e:  # surface the failure instead of silently swallowing it
+            msg = f"! {e}"
+        # Re-render the dashboard with a result banner so the user always sees the outcome.
+        self._send(_account_page(_ctx(self), msg))
 
     def _handle_note_dismiss(self) -> None:
         if not _is_authed(self):
@@ -1643,15 +1728,23 @@ def serve(port: int = _PORT) -> None:
     try:
         import threading as _t
 
-        from ghosted import semantic_search as rabbit_search
+        from ghosted import semantic_search
 
-        _t.Thread(target=rabbit_search.warm, daemon=True).start()
+        _t.Thread(target=semantic_search.warm, daemon=True).start()
     except Exception:
         pass
     try:  # complete spooled mesh-mail / fetch the instant connectivity returns
         from ghosted import flusher
 
         flusher.start_autoflush()
+    except Exception:
+        pass
+    try:  # bring Tor up in the background so the Tor egress face is always ready
+        import threading as _t2
+
+        from ghosted import tor
+
+        _t2.Thread(target=tor.start, daemon=True).start()
     except Exception:
         pass
     cls = _classify(_all_local_ips())
