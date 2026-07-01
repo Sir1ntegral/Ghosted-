@@ -12,6 +12,11 @@ name: Release
 #   AZURE_SIGN_ACCOUNT, AZURE_SIGN_PROFILE, RELEASE_SIGNING=true
 #   (optional) TOR_EXPERT_VERSION to pin the bundled Tor.
 #
+# Auth is client-secret by default. To switch to OIDC (no long-lived secret) later:
+#   set repo var AZURE_AUTH_MODE=oidc, add a federated credential on the app
+#   (subject repo:Sir1ntegral/Ghosted-:ref:refs/tags/v*), and add secret
+#   AZURE_SUBSCRIPTION_ID. This is DORMANT until AZURE_AUTH_MODE=oidc is set.
+#
 # NOTE: verify the azure/trusted-signing-action version tag below against the marketplace
 # before first use. Signing establishes a verified publisher identity; SmartScreen
 # reputation builds over time (it is not instant for a new publisher).
@@ -64,12 +69,25 @@ jobs:
         shell: pwsh
         run: ./build.ps1
 
+      # OIDC path — DORMANT until you set repo var AZURE_AUTH_MODE=oidc, add a federated
+      # credential on the app (subject repo:Sir1ntegral/Ghosted-:ref:refs/tags/v*), and
+      # add secret AZURE_SUBSCRIPTION_ID. Until then this step is skipped and the signing
+      # steps use AZURE_CLIENT_SECRET (the default).
+      - name: Azure login (OIDC)
+        if: ${{ vars.AZURE_AUTH_MODE == 'oidc' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Sign Ghosted.exe (Azure Trusted Signing)
         uses: azure/trusted-signing-action@v0.5.9
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # OIDC mode leaves this empty -> the action uses the azure/login credential
+          azure-client-secret: ${{ vars.AZURE_AUTH_MODE == 'oidc' && '' || secrets.AZURE_CLIENT_SECRET }}
           endpoint: ${{ vars.AZURE_SIGN_ENDPOINT }}
           trusted-signing-account-name: ${{ vars.AZURE_SIGN_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_SIGN_PROFILE }}
@@ -90,7 +108,7 @@ jobs:
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          azure-client-secret: ${{ vars.AZURE_AUTH_MODE == 'oidc' && '' || secrets.AZURE_CLIENT_SECRET }}
           endpoint: ${{ vars.AZURE_SIGN_ENDPOINT }}
           trusted-signing-account-name: ${{ vars.AZURE_SIGN_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_SIGN_PROFILE }}
