@@ -172,19 +172,18 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
 
     Ghosted is a standalone Windows app: its real remote access control is the
     master-password session gate (_is_authed) plus the brute-force lockout and
-    body cap in do_POST. The rabbit Gojo/Madara boundary is an OPTIONAL extra
-    DoS/reputation layer used when the rabbit mind is present and has been
-    integrated. It is therefore ADVISORY here:
+    body cap in do_POST. On top of that, Ghosted OWNS its request boundary
+    (ghosted.gate.GojoBoundaryGate): homepage_get is a *known* action with a
+    real per-client throttle ceiling, so the DoS layer now ENFORCES rather than
+    merely advises:
 
       * loopback (the operator at the machine) is always admitted;
-      * a genuine boundary deny (throttle / role / source-class) is honored;
-      * "not present" (standalone) or "unknown_action" (rabbit not yet
-        integrated to know homepage_get) must NOT hard-block — otherwise a
-        remote peer can't even reach the login form. _is_authed still gates
-        all content behind the master password.
+      * a real throttle deny (flood control) is honored — the peer is blocked;
+      * absence of the gate (import failed) or any unexpected deny reason fails
+        OPEN — a legitimate remote peer must always be able to reach the login
+        form, and _is_authed still gates all content behind the master password.
 
-    Registering homepage_get in rabbit's ingress_policy.json is deferred to the
-    integration pass; until then the boundary advises but never locks out."""
+    (The gate is Ghosted's own — no rabbit ingress_policy.json coupling.)"""
     if client_ip.startswith("127."):
         return True  # loopback = at the machine; not network exposure
     gate = _gate()
@@ -203,8 +202,9 @@ def _gojo_admits(client_ip: str, path: str) -> bool:
         )
         if verdict.get("decision") == "allow":
             return True
-        # Pre-integration: rabbit doesn't yet know this action. Advise, don't lock out.
-        return verdict.get("reason") == "unknown_action"
+        # Honor a real throttle (flood control) → block. Any other/unexpected
+        # deny reason fails open so a legitimate remote peer still reaches login.
+        return verdict.get("reason") != "throttled"
     except Exception:
         return (
             True  # boundary error must not harden a standalone install into local-only
