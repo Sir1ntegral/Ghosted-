@@ -12,6 +12,7 @@ egress IP (what the ISP / Tor exit sees).
 from __future__ import annotations
 
 import html
+import json
 import os
 import secrets
 import socket
@@ -628,10 +629,66 @@ def _results_page(query: str, ctx: dict | None = None) -> str:
 # Localhost is always open (you're at the machine). Remote (LAN / WireGuard mesh)
 # must unlock with the vault master password — then it rides a session cookie.
 _SESSIONS: dict = {}  # token -> expiry epoch
+_REMEMBER: dict = {}  # token -> expiry — the persisted (stay-logged-in) subset
+_SESSIONS_LOADED = False  # lazy one-time load of persisted sessions
 _SESSIONS_LOCK = threading.Lock()
 _SESSION_TTL = 12 * 3600  # sessions expire after 12h
 _REMEMBER_TTL = 30 * 24 * 3600  # "stay logged in" — persistent cookie, 30 days
 _SESSIONS_MAX = 1024  # bound the map (anti-growth)
+
+
+def _sessions_path() -> str:
+    """Where the stay-logged-in sessions are persisted (tokens + expiry ONLY — never the
+    master password, which is memory-only and can't safely touch disk)."""
+    try:
+        from ghosted.mail import _data_root
+
+        d = _data_root()
+    except Exception:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        d = os.path.join(base, "Ghosted")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "sessions.json")
+
+
+def _ensure_sessions_loaded() -> None:
+    """Load persisted stay-logged-in sessions once, so a remembered login survives an
+    app restart. Expired tokens are dropped. Best-effort, never raises."""
+    global _SESSIONS_LOADED
+    if _SESSIONS_LOADED:
+        return
+    with _SESSIONS_LOCK:
+        if _SESSIONS_LOADED:
+            return
+        try:
+            with open(_sessions_path(), encoding="utf-8") as fh:
+                data = json.load(fh)
+            now = time.time()
+            for tok, exp in (data or {}).items():
+                if isinstance(exp, (int, float)) and exp > now:
+                    _SESSIONS[tok] = exp
+                    _REMEMBER[tok] = exp
+        except Exception:
+            pass
+        _SESSIONS_LOADED = True
+
+
+def _save_persisted_sessions() -> None:
+    """Write the current stay-logged-in sessions to disk (0600), dropping expired ones.
+    Call under _SESSIONS_LOCK."""
+    now = time.time()
+    for t in [t for t, e in _REMEMBER.items() if e <= now]:
+        _REMEMBER.pop(t, None)
+    try:
+        p = _sessions_path()
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump(_REMEMBER, fh)
+        try:
+            os.chmod(p, 0o600)
+        except OSError:
+            pass
+    except Exception:
+        pass
 _LOGIN_FAILS: dict = {}  # ip -> (fail_count, window_start) — brute-force guard
 _LOGIN_MAX = 5  # failures per window before lockout
 _LOGIN_WINDOW = 300  # 5 min
@@ -692,12 +749,15 @@ def _is_authed(handler) -> bool:
     tok = _cookie_token(handler)
     if not tok:
         return False
+    _ensure_sessions_loaded()  # restore stay-logged-in sessions after an app restart
     with _SESSIONS_LOCK:
         exp = _SESSIONS.get(tok)
         if exp is None:
             return False
         if exp <= time.time():  # expired → evict + deny
             _SESSIONS.pop(tok, None)
+            if _REMEMBER.pop(tok, None) is not None:
+                _save_persisted_sessions()
             return False
         return True
 
@@ -1382,6 +1442,8 @@ class _Handler(BaseHTTPRequestHandler):
             tok = _cookie_token(self)
             with _SESSIONS_LOCK:
                 _SESSIONS.pop(tok, None)
+                if _REMEMBER.pop(tok, None) is not None:
+                    _save_persisted_sessions()  # forget the persisted login too
             with _MAIL_LOCK:  # drop the in-memory mailbox key too
                 _MAIL_KEYS.pop(tok, None)
             self.send_response(303)
@@ -1507,9 +1569,14 @@ class _Handler(BaseHTTPRequestHandler):
         with _SESSIONS_LOCK:
             for _k in [k for k, v in _SESSIONS.items() if v <= now]:
                 _SESSIONS.pop(_k, None)
+                _REMEMBER.pop(_k, None)
             if len(_SESSIONS) >= _SESSIONS_MAX:
                 _SESSIONS.clear()
+                _REMEMBER.clear()
             _SESSIONS[tok] = now + ttl
+            if remember:  # persist so the login survives an app restart
+                _REMEMBER[tok] = now + ttl
+                _save_persisted_sessions()
         # Login once: seed the mailbox key under the NEW session token (this request
         # carried no cookie yet), so /mail opens without a second password prompt.
         if passphrase:
