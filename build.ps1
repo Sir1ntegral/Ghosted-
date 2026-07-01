@@ -29,6 +29,23 @@ $args = @(
 if (Test-Path $model) { $args += @("--add-data", "$model;ghosted/data") }
 if (Test-Path $icon) { $args += @("--add-data", "$icon;.") }
 
+# Bundle Tor so the anonymized browser works 100% out of the box (no Tor Browser
+# needed on the user's machine). tor.py finds the bundled binary at _MEIPASS/tor/tor.exe.
+# Source: $env:GHOSTED_TOR_BUNDLE, else the Tor Browser default location. Not committed
+# to the repo (redistributed at build time under Tor's free license).
+$torExe = $env:GHOSTED_TOR_BUNDLE
+if (-not $torExe -or -not (Test-Path $torExe)) {
+    $torExe = Join-Path $HOME "Desktop\Tor Browser\Browser\TorBrowser\Tor\tor.exe"
+}
+if (Test-Path $torExe) {
+    $args += @("--add-binary", "$torExe;tor")
+    Write-Host "[tor] bundling $torExe"
+    $torPt = Join-Path (Split-Path $torExe) "PluggableTransports"
+    if (Test-Path $torPt) { $args += @("--add-data", "$torPt;tor/PluggableTransports") }
+} else {
+    Write-Host "[tor] no tor.exe found to bundle -> Tor egress will need Tor Browser/PATH at runtime"
+}
+
 # Optional runtime libs — collected only when installed (each gates a capability;
 # the app degrades cleanly without them, so a missing one must not break the build).
 foreach ($opt in @("bs4", "rapidocr_onnxruntime", "pypdf", "docx")) {

@@ -1,50 +1,67 @@
 # Ghosted 🐰
 
-A **sovereign** application built on the Rabbit mind: a stealth console, a Google-like
-search homepage, and a meaning-aware semantic search — all running on Rabbit's own
-organs (no Google APIs, no third-party browser engine, no Tailscale).
+A **sovereign, standalone** privacy tool for Windows: a stealth console, a Google-like
+search **homepage**, private **email**, a **WireGuard** device mesh, and meaning-aware
+semantic search — all on Ghosted's **own** engines. No Google APIs, no third-party
+browser engine, no cloud, and **no dependency on any other project**. It carries its
+own crypto, its own masked HTTP + **bundled Tor**, its own EDR-lite, and its own
+boundary (Gojo).
 
-## Faces
+## Install (Windows)
 
-| Module | What it is |
+Download the installer from the [**latest release**](../../releases/latest) and run it —
+it installs per-user (no admin), creates a desktop icon, and launches. Your **search
+homepage opens in your browser** automatically. That's it.
+
+- Everything the browser needs is in the package, including its **own Tor** — anonymized
+  browsing works out of the box, with a clearnet fallback so it's never blocked.
+- **Full** build includes meaning-ranking (numpy/scipy); **Lean** is smaller (lexical
+  ranking). Either works fully.
+
+## What it does
+
+| Face | What it is |
 |---|---|
-| `ghosted.console` | Ghost stealth console — `recon`, `cloak`/`uncloak` (stego), `forge`, `network` (WireGuard PackMesh), `encrypt`/`decrypt` (RABBIT-CIPHER-1), `browse`. |
-| `ghosted.homepage` | Sovereign Google-like search homepage. Stdlib `http.server`, **Gojo-gated** (throttle + policy + audit), binds `0.0.0.0`, shows LAN / WireGuard / **egress** IPs. |
-| `ghosted.semantic_search` | Re-ranks web results by **meaning, context, sentiment** and the reasoning **Dominance Engine's** read of query **intent**. |
+| **Homepage** (`:7654`) | Google-like search + your account: private email, WireGuard, health, all Gojo-gated. Opens in your browser. |
+| **Console** | `browse`, `recon`, `cloak`/`uncloak` (stego), `forge`, `encrypt`/`decrypt` (GHOSTED-CIPHER-1), `wg` (WireGuard), `tor`, `scan` (EDR), `update`, `defense`. |
+| **Email** | Send/receive real email (SMTP/IMAP/POP), sealed at rest under your master password. |
+| **WireGuard** | Enroll your devices into a sovereign mesh, connect real tunnels, all sealed in your vault. |
 
-## How it browses (no third-party browser)
+## Privacy model
 
-Every fetch rides Rabbit's own sovereign HTTP (`rabbit.core.sovereign_downloader`):
-**5+ engine TLS masks** (chrome142/136, firefox144/135, edge101, safari184, tor145)
-via `curl_cffi` real-JA3 with **header↔TLS coherence**, **Tor by default** (clearnet
-fallback so it's never blocked), ghost rotating headers, EDR-scanned + Madara-enrolled.
+Every fetch rides Ghosted's own masked HTTP: real-browser **TLS/JA3 masks** via
+`curl_cffi`, **Tor by default** for sensitive egress (bundled tor.exe, auto-started),
+clearnet fallback so it never hard-fails. Getting a link never costs anonymity. The
+homepage/account are **Gojo-gated** (role + source-class policy + throttle + audit) and
+fail closed — only the local operator drives sensitive actions. Ghosted's own EDR-lite
+scans anything it downloads, protecting the app's own integrity.
 
-## Dependency: the Rabbit mind
+## Security & scope
 
-This app imports the `rabbit` package (the mind). Make it importable:
+Ghosted is dual-use security tooling intended for the operator's **own** devices,
+research, and defensive use. It protects **itself** (integrity, functionality,
+reputation) — it is not a host antivirus.
 
-```powershell
-$env:PYTHONPATH = "C:\path\to\RabbitProject-clean"
-```
+## Run from source (developers)
 
-Optional extras: `pip install .[ocr]` (RABBIT-OCR-1 / RapidOCR), `.[build]` (PyInstaller).
-
-## Run
-
-```powershell
-$env:PYTHONPATH = "C:\path\to\RabbitProject-clean"
-python -m ghosted.console        # stealth console
-python -m ghosted.homepage       # http://127.0.0.1:7654
-```
-
-## Build the exe
+Requires Python 3.11+.
 
 ```powershell
-./build.ps1            # produces dist/Ghosted/ (onedir, ghost-rabbit icon)
+git clone https://github.com/Sir1ntegral/Ghosted-.git
+cd Ghosted-
+pip install -e .            # base: curl_cffi, beautifulsoup4, Pillow
+ghosted                     # stealth console (auto-opens the homepage)
+ghosted-home                # just the homepage -> http://127.0.0.1:7654
 ```
 
-## Security note
+Optional extras: `.[semantic]` (numpy meaning-ranking), `.[ocr]`, `.[docs]`,
+`.[build]` (PyInstaller).
 
-Ghost is **dual-use** security tooling intended for the operator's own devices,
-research, and defensive use. Run standalone it is outside Rabbit's Madara/Watchtower
-envelope; the homepage/API are Gojo-gated and fail-closed to localhost.
+## Build the installer
+
+```powershell
+./build.ps1                 # onedir bundle -> dist/Ghosted/ (bundles Tor if present)
+# then compile installer.iss with Inno Setup -> installer_out/Ghosted-Setup.exe
+```
+
+Code signing and the auto-updater are documented in [SIGNING.md](SIGNING.md).
