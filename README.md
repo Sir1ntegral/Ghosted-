@@ -9,14 +9,23 @@ boundary (Gojo).
 
 ## Install (Windows)
 
-Download the installer from the [**latest release**](../../releases/latest) and run it —
-it installs per-user (no admin), creates a desktop icon, and launches. Your **search
-homepage opens in your browser** automatically. That's it.
+**Download page → https://sir1ntegral.github.io/Ghosted-/** — or grab the installer
+straight from the [**latest release**](../../releases/latest) and run it. It installs
+per-user (no admin), creates a desktop icon, and launches — your **search homepage opens
+in your browser** automatically.
+
+| Method | Command / link |
+|---|---|
+| **Installer** | [Download `Ghosted-Setup.exe`](../../releases/latest/download/Ghosted-Setup.exe) |
+| **Scoop** | `scoop install https://raw.githubusercontent.com/Sir1ntegral/Ghosted-/main/scoop/ghosted.json` |
+| **winget** | *coming soon* (pending code-signing) |
+| **Microsoft Store** | *planned* |
 
 - Everything the browser needs is in the package, including its **own Tor** — anonymized
   browsing works out of the box, with a clearnet fallback so it's never blocked.
-- **Full** build includes meaning-ranking (numpy/scipy); **Lean** is smaller (lexical
-  ranking). Either works fully.
+- New publisher: Windows SmartScreen may say "unknown publisher" → **More info → Run anyway**.
+
+See [DISTRIBUTION.md](DISTRIBUTION.md) for all channels.
 
 ## What it does
 
