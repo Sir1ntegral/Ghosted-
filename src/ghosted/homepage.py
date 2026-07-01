@@ -1433,6 +1433,29 @@ def _mail_page(ctx: dict, pw: str, read_idx: int = -1, msg: str = "", prefill: d
 </body></html>"""
 
 
+def _friendly_mail_error(exc: Exception) -> str:
+    """Turn a raw SMTP/IMAP/POP failure into plain guidance. The overwhelmingly common
+    cause is the provider requiring an APP PASSWORD (Gmail/Yahoo/Outlook reject normal
+    passwords over IMAP/SMTP), not a bug in Ghosted."""
+    s = str(exc).lower()
+    auth = ("webloginrequired", "invalid credentials", "authenticationfailed",
+            "authentication failed", "application-specific password", "app password",
+            "5.7.9", "5.7.8", "534", "535", "please log in", "username and password not accepted",
+            "auth", "login failed")
+    if any(h in s for h in auth):
+        return ("your email provider rejected the login. Gmail, Yahoo and Outlook require an "
+                "APP PASSWORD (not your normal password): turn on 2-step verification, generate "
+                "an app password in your account's security settings, and use that here.")
+    net = ("getaddrinfo", "name or service", "no address", "timed out", "timeout",
+           "connection refused", "unreachable", "failed to connect")
+    if any(h in s for h in net):
+        return ("could not reach the mail server — check the host/port, your internet "
+                "connection, and that your provider has IMAP/SMTP enabled.")
+    if "certificate" in s or "ssl" in s or "tls" in s:
+        return f"secure-connection (TLS) problem with the mail server: {exc}"
+    return f"could not complete: {exc}"
+
+
 def _help_page() -> str:
     from ghosted import help_text
 
@@ -1828,7 +1851,7 @@ class _Handler(BaseHTTPRequestHandler):
                 else:
                     msg = "could not delete that message"
         except Exception as e:  # surface the error, never 500
-            msg = f"could not complete: {e}"
+            msg = _friendly_mail_error(e)
         self._send(_mail_page(ctx, pw, -1, msg))
 
     def _record_fail(self, client: str, now: float) -> None:
