@@ -90,25 +90,35 @@ _EGRESS_CACHE: dict = {"ip": None, "at": 0.0}
 
 def _egress_ip() -> str:
     """What the outside world sees — via Ghosted's own sovereign HTTP (masked).
-    Cached 120s so it never blocks page renders (perf: was adding ~5s/request)."""
+
+    Reliability: only a SUCCESSFUL lookup is cached (120s); a transient failure never
+    poisons the cache, so the value fills in on the next request instead of showing
+    'failed' for two minutes. On failure we return the last known-good IP if we have
+    one, else a soft 'checking…' (never a scary error). Tries several IP providers.
+    """
     import time
 
     if _EGRESS_CACHE["ip"] and (time.time() - _EGRESS_CACHE["at"] < 120):
         return _EGRESS_CACHE["ip"]
-    val = "unknown (offline or fetch failed)"
     try:
         from ghosted.http import sovereign_http_get
 
-        r = sovereign_http_get(
-            "https://api.ipify.org", connect_timeout=5, read_timeout=5
-        )
-        if r.success and r.body:
-            val = r.body.decode(errors="replace").strip()
+        for url in ("https://api.ipify.org", "https://ifconfig.me/ip",
+                    "https://icanhazip.com"):
+            try:
+                r = sovereign_http_get(url, connect_timeout=5, read_timeout=5)
+                if getattr(r, "success", False) and getattr(r, "body", None):
+                    ip = r.body.decode(errors="replace").strip().splitlines()[0].strip()
+                    if ip:
+                        _EGRESS_CACHE["ip"] = ip  # cache ONLY on success
+                        _EGRESS_CACHE["at"] = time.time()
+                        return ip
+            except Exception:
+                continue
     except Exception:
         pass
-    _EGRESS_CACHE["ip"] = val
-    _EGRESS_CACHE["at"] = time.time()
-    return val
+    # failure: keep last known-good; never cache the failure (so it retries next time)
+    return _EGRESS_CACHE["ip"] or "checking…"
 
 
 def _search(query: str) -> list:

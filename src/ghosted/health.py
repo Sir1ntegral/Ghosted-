@@ -216,17 +216,23 @@ def _egress_ip() -> str:
 
     if _EGRESS_CACHE["ip"] and (time.time() - _EGRESS_CACHE["at"] < 120):
         return _EGRESS_CACHE["ip"]
-    val = "unknown"
     try:
         from ghosted.http import sovereign_http_get
 
-        r = sovereign_http_get("https://api.ipify.org", connect_timeout=4, read_timeout=4)
-        if getattr(r, "success", False) and r.body:
-            val = r.body.decode(errors="replace").strip()
+        for url in ("https://api.ipify.org", "https://ifconfig.me/ip",
+                    "https://icanhazip.com"):
+            try:
+                r = sovereign_http_get(url, connect_timeout=4, read_timeout=4)
+                if getattr(r, "success", False) and getattr(r, "body", None):
+                    ip = r.body.decode(errors="replace").strip().splitlines()[0].strip()
+                    if ip:
+                        _EGRESS_CACHE["ip"], _EGRESS_CACHE["at"] = ip, time.time()
+                        return ip
+            except Exception:
+                continue
     except Exception:
         pass
-    _EGRESS_CACHE["ip"], _EGRESS_CACHE["at"] = val, time.time()
-    return val
+    return _EGRESS_CACHE["ip"] or "checking…"  # never cache a failure; retry next time
 
 
 def _security() -> dict[str, Any]:
