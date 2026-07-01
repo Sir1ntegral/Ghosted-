@@ -10,7 +10,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/Sir1ntegral/Ghosted-/releases/download/v0.1.0/Ghosted-Setup.exe#/dl.exe",
-            "hash": "86e8338a575ce4299236466dfd0863ee74acd9350601a8e3424b36d7d827ada0"
+            "hash": "0435c4110a6128d05a9562892ee7c9892ba08ef5f3dbf26ada28ead565fb4de7"
         }
     },
     "innosetup": true,
