@@ -2,8 +2,6 @@
 account-driven send/receive resolution. Guards the 'email actually works' contract."""
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from ghosted import mail
