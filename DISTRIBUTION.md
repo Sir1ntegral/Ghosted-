@@ -21,33 +21,26 @@ manifest in `bucket/ghosted.json`) and `scoop bucket add ghosted <url>`. The man
 `innosetup: true` (silent per-user install), `shortcuts`, and `checkver`/`autoupdate` so
 Scoop detects new GitHub releases automatically.
 
-## 3) winget (Windows Package Manager)
+## 3) Trust the developer (signature, no CA)
 
-Manifest (v1.6, 3 files) in [`winget/`](winget/), package id **`Sir1ntegral.Ghosted`**.
-To publish so users can `winget install Sir1ntegral.Ghosted`:
+Ghosted is signed by the developer's own certificate rather than a commercial CA, so
+Windows shows "unknown publisher" (**More info → Run anyway** works). Users who choose to
+trust the developer can make the signature validate — no admin, reversible:
 
-1. Fork **microsoft/winget-pkgs**.
-2. Copy the three YAMLs to `manifests/s/Sir1ntegral/Ghosted/0.1.0/`.
-3. Validate: `winget validate --manifest <folder>` and (optional) `winget install --manifest <folder>`.
-4. Open a PR — the winget bot runs automated validation (installs the package in a sandbox,
-   scans it). **Note:** a new-publisher / dev-cert installer can draw a SmartScreen or
-   reputation flag during validation; this is cleaner once Azure Trusted Signing lands
-   (see SIGNING.md). Bump `PackageVersion` + `InstallerSha256` for each new release.
+- [`trust/Ghosted-Developer.cer`](trust/Ghosted-Developer.cer) — the developer's **public**
+  cert (no private key), thumbprint `B95499709AFC59167C0CC6172BA39C64CC0AE17A`.
+- [`trust/Trust-Ghosted-Developer.ps1`](trust/Trust-Ghosted-Developer.ps1) — imports it to
+  the current user's Trusted Publisher + Root stores after a confirmation prompt
+  (`-Yes` to skip it, `-Remove` to undo).
 
-## 4) Microsoft Store (deferred)
+Both are attached to each release so downloaders have them alongside the installer. This is
+an opt-in trust model for an independent developer — the machine will then accept code
+signed by the Ghosted developer, so only run it if you trust them.
 
-Best reach + trust, biggest effort — and it needs money + review, so it's parked until the
-same funding as the signing cert:
-
-- A **Partner Center developer account** (~$19 one-time).
-- Repackage the app as **MSIX** (the current build is a PyInstaller onedir + Inno Setup exe;
-  Store requires MSIX). Options: wrap with the MSIX Packaging Tool, or build an MSIX target.
-- Store **certification review** before it goes live.
-
-When funded, the sequence is: dev account → MSIX package (signed by the Store or your cert)
-→ submit → pass certification. I can prep the MSIX packaging when you're ready.
+> The Microsoft ecosystem paths (winget, Store, Azure Trusted Signing) are intentionally
+> left out — Ghosted stays self-signed + opt-in-trust rather than depending on them.
 
 ---
 
 Every channel points at the same GitHub release asset, so there's one source of truth:
-build → sign → release → (landing page / Scoop / winget / Store) all follow.
+build → sign → release → (landing page / Scoop / trust) all follow.

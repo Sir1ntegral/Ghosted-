@@ -18,14 +18,24 @@ in your browser** automatically.
 |---|---|
 | **Installer** | [Download `Ghosted-Setup.exe`](../../releases/latest/download/Ghosted-Setup.exe) |
 | **Scoop** | `scoop install https://raw.githubusercontent.com/Sir1ntegral/Ghosted-/main/scoop/ghosted.json` |
-| **winget** | *coming soon* (pending code-signing) |
-| **Microsoft Store** | *planned* |
 
 - Everything the browser needs is in the package, including its **own Tor** — anonymized
   browsing works out of the box, with a clearnet fallback so it's never blocked.
-- New publisher: Windows SmartScreen may say "unknown publisher" → **More info → Run anyway**.
 
-See [DISTRIBUTION.md](DISTRIBUTION.md) for all channels.
+### Trust the developer (optional)
+
+Ghosted is signed by the developer's own certificate, so Windows shows "unknown
+publisher" (**More info → Run anyway** works fine). If you'd rather have the signature
+validate as trusted and skip that prompt, you can **opt in to trust the developer** — no
+admin needed, and it's reversible:
+
+```powershell
+# from the release (Ghosted-Developer.cer + the script are attached), or the repo's trust/ folder
+.\Trust-Ghosted-Developer.ps1        # prompts you to confirm; -Remove to undo
+```
+
+Only do this if you choose to trust the Ghosted developer. See
+[trust/](trust/) and [DISTRIBUTION.md](DISTRIBUTION.md).
 
 ## What it does
 
