@@ -109,6 +109,31 @@ def test_local_wireguard_enroll_allowed(tmp_path, monkeypatch):
     assert wg_enroll.add_peer("phone", passphrase=PW, source_class="internal")["ok"]
 
 
+def test_remove_device_preserves_others_and_fills_gap(tmp_path, monkeypatch):
+    _vault(tmp_path, monkeypatch)
+    from ghosted import wg_enroll
+
+    for n in ("tower", "phone", "laptop"):
+        wg_enroll.add_peer(n, passphrase=PW, hub="tower")
+    before = {d["name"]: d["address"] for d in wg_enroll.roster(PW)}
+    assert wg_enroll.remove_device("phone", PW)["ok"]
+    after = {d["name"]: d["address"] for d in wg_enroll.roster(PW)}
+    assert "phone" not in after
+    assert after["tower"] == before["tower"] and after["laptop"] == before["laptop"]
+    # a new device fills the freed slot rather than shifting anyone
+    wg_enroll.add_peer("tablet", passphrase=PW, hub="tower")
+    assert {d["name"]: d["address"] for d in wg_enroll.roster(PW)}["tablet"] == "10.44.0.2"
+
+
+def test_remove_device_remote_denied_and_unknown_handled(tmp_path, monkeypatch):
+    _vault(tmp_path, monkeypatch)
+    from ghosted import wg_enroll
+
+    wg_enroll.add_peer("tower", passphrase=PW)
+    assert wg_enroll.remove_device("tower", PW, source_class="network_remote")["ok"] is False
+    assert wg_enroll.remove_device("ghost", PW)["ok"] is False
+
+
 def test_source_class_derived_from_client_ip():
     from ghosted import homepage
 

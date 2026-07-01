@@ -533,8 +533,14 @@ def handle_command(
                 out(wg_tunnel.connect(nm, conf) if conf else "no such enrolled device")
         elif sub in ("disconnect", "down"):
             out(wg_tunnel.disconnect(arg.strip() or ask("  tunnel name: ").strip()))
+        elif sub in ("remove", "rm"):
+            if not session.get("pw"):
+                out("locked — run 'login' first")
+            else:
+                out(wg_enroll.remove_device(arg.strip() or ask("  device name: ").strip(),
+                                            session["pw"]))
         else:
-            out("wg <status|roster|enroll|join|connect|disconnect> [name]")
+            out("wg <status|roster|enroll|join|connect|disconnect|remove> [name]")
     elif cmd == "encrypt":
         import base64
 

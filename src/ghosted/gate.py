@@ -41,6 +41,7 @@ _POLICY: dict[str, dict[str, frozenset[str]]] = {
     "wireguard_connect": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
     "wireguard_disconnect": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
     "wireguard_enroll": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
+    "wireguard_remove": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
     "wireguard_join": {"roles": frozenset({"operator"}), "sources": frozenset({"internal"})},
 }
 

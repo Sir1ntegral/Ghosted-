@@ -1068,9 +1068,11 @@ def _codes_page(codes: list, ctx: dict | None = None) -> str:
 </body></html>"""
 
 
-def _wireguard_page(ctx: dict | None = None, msg: str = "") -> str:
-    """The WireGuard control center (its own tab): tunnel status + enroll / connect /
-    join controls. Every form posts to /account's authed, Gojo-guarded handlers."""
+def _wireguard_page(ctx: dict | None = None, msg: str = "",
+                    devices: list | None = None) -> str:
+    """The WireGuard control center (its own tab): tunnel status + device roster +
+    enroll / connect / join / remove. Every form posts to /account's authed,
+    Gojo-guarded handlers."""
     ctx = ctx or {"authed": True, "accent": "#9aa9ff", "notes": 0}
     banner = ""
     if msg:
@@ -1081,11 +1083,38 @@ def _wireguard_page(ctx: dict | None = None, msg: str = "") -> str:
         from ghosted import wg_tunnel
 
         st = wg_tunnel.status()
+        active = st.get("active_tunnels") or []
         wg_installed = ("✓ WireGuard for Windows installed" if st.get("installed")
                         else "WireGuard for Windows not installed — tunnels export as .conf to import")
-        tuns = ", ".join(st.get("active_tunnels") or []) or "none active"
+        tuns = ", ".join(active) or "none active"
     except Exception:
-        wg_installed, tuns = "status unavailable", "unknown"
+        wg_installed, tuns, active = "status unavailable", "unknown", []
+    # Device roster (shown after "View my devices" unseals it) — each with connect +
+    # remove. WireGuard's own service auto-reconnects installed tunnels on boot.
+    if devices is not None:
+        if devices:
+            rows = ""
+            for d in devices:
+                up = " · <span class=\"s-ok\">up</span>" if d["name"] in active else ""
+                rows += (
+                    f'<div class="row">{html.escape(d["name"])} — '
+                    f'{html.escape(d["address"])} · {html.escape(d.get("endpoint",""))}{up}'
+                    f'<form action="/account" method="post" style="display:inline;margin-left:8px">'
+                    f'<input type="hidden" name="action" value="wg_remove">'
+                    f'<input type="hidden" name="name" value="{html.escape(d["name"])}">'
+                    f'<input type="password" name="pw" placeholder="master pw" style="width:120px">'
+                    f'<button type="submit">remove</button></form></div>'
+                )
+            roster_html = f'<h3>Your devices</h3>{rows}'
+        else:
+            roster_html = '<h3>Your devices</h3><div class="row muted">no devices enrolled yet</div>'
+    else:
+        roster_html = (
+            '<h3>Your devices</h3>'
+            '<form action="/account" method="post"><input type="hidden" name="action" value="wg_devices">'
+            '<input type="password" name="pw" placeholder="your master password">'
+            '<div class="btns"><button type="submit">View my devices</button></div></form>'
+        )
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Ghosted — WireGuard</title>
 <style>{_CSS}</style>{_accent_style(ctx)}</head><body>
 {_toolbar(ctx)}
@@ -1095,6 +1124,8 @@ def _wireguard_page(ctx: dict | None = None, msg: str = "") -> str:
 <div class="acct" style="text-align:left">
   <div class="row muted">{html.escape(wg_installed)}</div>
   <div class="row muted">active tunnels: {html.escape(tuns)}</div>
+
+  {roster_html}
 
   <h3>Enroll a device</h3>
   <div class="muted">Added to your mesh; existing devices keep their keys. Enrollment is
@@ -1868,6 +1899,31 @@ class _Handler(BaseHTTPRequestHandler):
                 r = wg_tunnel.disconnect(g("name"), source_class=_request_source_class(self))
                 wmsg = f"tunnel '{g('name')}' down" if r.get("ok") else f"! {r.get('error', r.get('detail', 'failed'))}"
                 self._send(_wireguard_page(_ctx(self), wmsg))
+                return
+            elif action == "wg_devices":
+                from ghosted import wg_enroll
+
+                try:
+                    devs = wg_enroll.roster(g("pw"))
+                except Exception:
+                    self._send(_wireguard_page(_ctx(self), "! wrong master password"))
+                    return
+                self._send(_wireguard_page(_ctx(self), devices=devs))
+                return
+            elif action == "wg_remove":
+                from ghosted import wg_enroll
+
+                r = wg_enroll.remove_device(g("name"), g("pw"),
+                                            source_class=_request_source_class(self))
+                if r.get("ok"):
+                    try:
+                        devs = wg_enroll.roster(g("pw"))
+                    except Exception:
+                        devs = None
+                    self._send(_wireguard_page(_ctx(self),
+                               f"removed '{r['removed']}' — {r['count']} device(s) left", devices=devs))
+                else:
+                    self._send(_wireguard_page(_ctx(self), f"! {r.get('error', 'remove failed')}"))
                 return
             elif action == "connect_any":
                 from ghosted import connectivity

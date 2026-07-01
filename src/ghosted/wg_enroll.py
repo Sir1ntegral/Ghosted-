@@ -41,6 +41,7 @@ def _serialize(mesh) -> dict:
     devices = [
         {
             "name": name,
+            "address": dev.address,  # explicit so removal never shifts other devices
             "endpoint": dev.endpoint,
             "listen_port": dev.listen_port,
             "dns": dev.dns,
@@ -78,7 +79,7 @@ def _mesh_from_state(state: dict):
     for d in state.get("devices", []):
         priv_b64 = d.get("priv", "")
         if priv_b64:
-            mesh.add_device(
+            dev = mesh.add_device(
                 d["name"],
                 endpoint=d.get("endpoint", ""),
                 listen_port=int(d.get("listen_port", 0)),
@@ -87,10 +88,12 @@ def _mesh_from_state(state: dict):
             )
         else:
             # externally-keyed peer: we hold only its public key. Add a keyless slot
-            # (address from the pool) and stamp the known public key onto it.
+            # and stamp the known public key onto it.
             dev = mesh.add_device(d["name"], endpoint=d.get("endpoint", ""))
             dev.private_key = b""
             dev.public_key = base64.b64decode(d["external_pub"])
+        if d.get("address"):  # restore the exact address so removals never shift peers
+            dev.address = d["address"]
     for k, v in state.get("psk", {}).items():
         a, b = k.split("\x00")
         mesh._psk[tuple(sorted((a, b)))] = base64.b64decode(v)
@@ -115,6 +118,16 @@ def _persist(mesh, passphrase: str) -> dict:
     return configs
 
 
+def _next_free_address(mesh) -> str:
+    """Lowest /32 host in the subnet not already assigned — so a new device fills any
+    gap left by a removal rather than shifting anyone."""
+    used = {str(d.address) for d in mesh._devices.values() if d.address}
+    for host in mesh._net.hosts():
+        if str(host) not in used:
+            return str(host)
+    raise ValueError("mesh subnet is full")
+
+
 # ── public API ─────────────────────────────────────────────────────────────────
 def add_peer(name: str, endpoint: str = "", passphrase: str = "", *, hub: str = "",
              source_class: str = "internal") -> dict:
@@ -131,7 +144,9 @@ def add_peer(name: str, endpoint: str = "", passphrase: str = "", *, hub: str = 
     mesh = _load_or_new(passphrase, hub=hub)
     if name in mesh._devices:
         return {"ok": False, "error": f"device already enrolled: {name}"}
-    mesh.add_device(name, endpoint=endpoint)
+    free = _next_free_address(mesh)
+    dev = mesh.add_device(name, endpoint=endpoint)
+    dev.address = free  # deterministic: fill the lowest free slot, never shift peers
     configs = _persist(mesh, passphrase)
     event_bus.announce({"component": "wireguard", "event_type": "enroll_peer",
                         "device": name, "count": len(mesh._devices)})
@@ -160,7 +175,9 @@ def enroll_peer_pubkey(name: str, public_key: str, passphrase: str, *,
     mesh = _load_or_new(passphrase)
     if name in mesh._devices:
         return {"ok": False, "error": f"device already enrolled: {name}"}
-    dev = mesh.add_device(name, endpoint=endpoint)  # takes an address slot
+    free = _next_free_address(mesh)
+    dev = mesh.add_device(name, endpoint=endpoint)
+    dev.address = free
     dev.private_key = b""  # we do NOT hold this device's private key
     dev.public_key = raw
     _persist(mesh, passphrase)
@@ -225,6 +242,32 @@ def join_mesh(this_name: str, hub_public_key: str, hub_endpoint: str, passphrase
         "hand_back": "give the hub operator your public_key + preshared_key + address "
                      "so they can add you (enroll_peer_pubkey).",
     }
+
+
+def remove_device(name: str, passphrase: str, *, source_class: str = "internal") -> dict:
+    """Remove an enrolled device from the mesh. Remaining devices keep their keys AND
+    addresses (addresses are stored explicitly, so removal never shifts anyone); PSK
+    links involving the removed device are pruned. Guarded by Gojo."""
+    v = security.guard(action="wireguard_remove", source_class=source_class,
+                       metadata={"device": name})
+    if v.get("decision") != "allow":
+        return {"ok": False, "error": "blocked by boundary", "reason": v.get("reason")}
+    if not vault.has_mesh_state():
+        return {"ok": False, "error": "no mesh enrolled yet"}
+    state = vault.read_mesh_state(passphrase)
+    kept = [d for d in state.get("devices", []) if d["name"] != name]
+    if len(kept) == len(state.get("devices", [])):
+        return {"ok": False, "error": f"no such device: {name}"}
+    state["devices"] = kept
+    state["psk"] = {
+        k: val for k, val in state.get("psk", {}).items()
+        if name not in k.split("\x00")
+    }
+    mesh = _mesh_from_state(state)
+    _persist(mesh, passphrase)
+    event_bus.announce({"component": "wireguard", "event_type": "remove_peer",
+                        "device": name, "count": len(mesh._devices)})
+    return {"ok": True, "removed": name, "count": len(mesh._devices)}
 
 
 def roster(passphrase: str) -> list[dict]:
