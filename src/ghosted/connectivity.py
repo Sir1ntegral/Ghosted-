@@ -9,11 +9,21 @@ One sane, coordinated path to "always online":
      request "always enacts with the ISP" however the path is shaped.
   3. store-and-forward — if utterly offline, the intent is spooled and auto-completes
      the instant any link returns.
-  4. self-hotspot — Rabbit can stand up its own WiFi so peers join and the mesh runs
-     over it (Windows netsh hostednetwork).
+  4. dial-up / RAS — if no link is up, dial a configured ISP (modem/PPP/VPN/broadband)
+     via `rasdial`; if there's a door to the internet, Ghosted uses it.
+  5. self-hotspot — Ghosted can stand up its own WiFi so peers join and the mesh runs
+     over it (Windows netsh hostednetwork), sharing whatever path it got.
 
-Honest limit: zero physical link/radio = no traffic. This coordinates every path that
-*does* exist; it cannot conjure one that doesn't.
+Security model — getting a LINK never costs anonymity. This layer only obtains a path;
+WHAT crosses it stays protected by the egress layer regardless of the door used:
+  • identity + location stay secure — sensitive egress rides Tor (auto-started, always
+    available) over whatever link the ladder got, so the ISP/dial-up sees only Tor;
+  • boring routes look boring — every fetch wears a real-browser TLS/JA3 mask
+    (chrome/firefox/edge/safari/tor145), so Ghosted traffic is indistinguishable from
+    ordinary browsing; the reachability probes here are themselves plain/boring.
+
+Honest limit: zero physical link/radio AND no answerable dial-up = no traffic. This
+coordinates every door that *does* exist; it cannot conjure one that doesn't.
 """
 
 from __future__ import annotations
@@ -53,6 +63,93 @@ def online(timeout: float = 3.0) -> bool:
 def ensure_online(timeout: float = 4.0) -> dict:
     """Confirm a working path to the internet. Reports per-interface + overall."""
     return {"online": online(timeout), "interfaces": interfaces()}
+
+
+# ── dial-up (RAS / PPP) — the last-resort physical path to the ISP ────────────────
+def dialup_entries() -> list[str]:
+    """Configured dial-up / RAS connection names from the Windows phonebook(s)."""
+    names: set[str] = set()
+    for base in (os.environ.get("APPDATA"),
+                 os.environ.get("PROGRAMDATA") or os.environ.get("ALLUSERSPROFILE")):
+        if not base:
+            continue
+        pbk = os.path.join(base, "Microsoft", "Network", "Connections", "Pbk", "rasphone.pbk")
+        try:
+            with open(pbk, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line.startswith("[") and line.endswith("]") and len(line) > 2:
+                        names.add(line[1:-1])
+        except Exception:
+            continue
+    return sorted(names)
+
+
+def dialup_connect(name: str, username: str = "", password: str = "", timeout: float = 90.0) -> dict:
+    """Dial a configured RAS / dial-up entry (modem → local ISP) via `rasdial`. With no
+    credentials it uses the ones saved in the phonebook entry."""
+    if os.name != "nt":
+        return {"ok": False, "error": "dial-up (RAS) is Windows-only here"}
+    if not (name or "").strip():
+        return {"ok": False, "error": "a dial-up connection name is required"}
+    import subprocess
+
+    cmd = ["rasdial", name] + ([username, password] if username else [])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return {"ok": r.returncode == 0, "name": name,
+                "detail": (r.stdout or r.stderr).strip()[:300]}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "name": name, "error": str(e)}
+
+
+def dialup_disconnect(name: str = "") -> dict:
+    if os.name != "nt":
+        return {"ok": False, "error": "Windows only"}
+    import subprocess
+
+    cmd = ["rasdial", name, "/disconnect"] if name else ["rasdial", "/disconnect"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return {"ok": r.returncode == 0, "detail": (r.stdout or r.stderr).strip()[:200]}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def ensure_online_any(timeout: float = 4.0, dialup: bool = True, creds: dict | None = None) -> dict:
+    """Get online by ANY available means, in order: use an existing link (wifi / LAN /
+    ethernet) if one works; otherwise DIAL a configured dial-up ISP (RAS) and retry.
+    Reports the full ladder it tried, plus whether the anonymized Tor egress face is
+    ready to carry sensitive traffic over whatever link was obtained. (Sharing the
+    result is `start_hotspot`.)"""
+    report: dict = {"online": online(timeout), "interfaces": interfaces(), "tried": []}
+    if report["online"]:
+        report["via"] = "existing link"
+        report["tor_ready"] = _tor_ready()
+        return report
+    if dialup and os.name == "nt":
+        for name in dialup_entries():
+            u, p = (creds or {}).get(name, ("", ""))
+            res = dialup_connect(name, u, p)
+            report["tried"].append(res)
+            if res.get("ok") and online(timeout):
+                report["online"], report["via"] = True, f"dial-up: {name}"
+                report["tor_ready"] = _tor_ready()
+                return report
+    report["via"] = "no path available (no link, no answerable dial-up)"
+    report["tor_ready"] = False
+    return report
+
+
+def _tor_ready() -> bool:
+    """Fast, non-blocking check: is Ghosted's Tor egress face able to carry traffic
+    right now? Never starts Tor or blocks the ladder — fail-soft to False."""
+    try:
+        from ghosted import tor
+
+        return bool(tor.circuit_ready())
+    except Exception:
+        return False
 
 
 def sovereign_get(url: str, *, timeout: float = 15.0) -> dict:

@@ -154,11 +154,14 @@ class SovereignBrowserEngine:
         return self.web_search(f"{query} site:youtube.com", limit=limit)
 
     def tor_fetch(self, url: str) -> PageContent:
-        """Fetch over Tor (socks5h://127.0.0.1:9050) when a Tor daemon is up.
-
-        Tries curl_cffi through the local SOCKS proxy; falls back to a plain
-        fetch (clearnet) so the call never hard-fails when Tor is absent."""
+        """Fetch over Tor (socks5h://127.0.0.1:9050). Ghosted AUTO-STARTS a managed Tor
+        daemon so this always works; only if Tor genuinely can't start does it fall back
+        to a plain clearnet fetch, so the call never hard-fails."""
         try:
+            from ghosted import tor
+
+            if not tor.ensure(block=True, timeout=25):
+                return self.fetch_page(url)  # tor unavailable → clearnet fallback
             from curl_cffi import requests as creq  # type: ignore
 
             r = creq.get(
